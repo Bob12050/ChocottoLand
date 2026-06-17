@@ -1,4 +1,4 @@
-// ミニアランド v0.6.8.1 セーブ初期化修正版
+// ミニアランド v0.6.9 序盤ループ強化版
 // v0.5.7 の安定版をベースに、CSS / JS / 画像素材を外部ファイル化。
 // 既存の移動・戦闘・装備・クエスト処理は維持。
 
@@ -321,6 +321,45 @@
     }
   };
 
+  const QUEST_DEFS = [
+    {
+      id:"puru_hunt", title:"ぷるスライム退治", badge:"はじまりの依頼",
+      desc:"ひだまり草原でぷるスライムを3体倒す。まずは戦闘と拾う流れに慣れよう。",
+      type:"kill", targetId:"puru_slime", target:3,
+      reward:{ gold:50, items:{ herb:2 } },
+      next:"jelly_collect"
+    },
+    {
+      id:"jelly_collect", title:"ぷるゼリー集め", badge:"素材集め",
+      desc:"ぷるスライムが落とすぷるゼリーを3個集める。拾うボタンで素材を回収しよう。",
+      type:"item", targetId:"puru_jelly", target:3,
+      reward:{ gold:40 },
+      next:"first_craft"
+    },
+    {
+      id:"first_craft", title:"はじめての装備作成", badge:"鍛冶屋",
+      desc:"鍛冶屋で装備を1つ作成する。素材とGを使って、狩りやすさを上げよう。",
+      type:"craft", targetId:"any", target:1,
+      reward:{ gold:80, items:{ herb:1 } },
+      next:"kinokko_hunt"
+    },
+    {
+      id:"kinokko_hunt", title:"キノっこ討伐", badge:"次の狩場",
+      desc:"少し手ごわいキノっこを3体倒す。装備更新後の力試しにちょうどいい相手。",
+      type:"kill", targetId:"kinokko", target:3,
+      reward:{ gold:90, items:{ mushroom_grass:2 } },
+      next:"moco_challenge"
+    },
+    {
+      id:"moco_challenge", title:"モコホーンへの挑戦", badge:"Lv10推奨",
+      desc:"強敵モコホーンを1体倒す。Lv10前後、装備強化後の目標として挑もう。",
+      type:"kill", targetId:"moco_horn", target:1,
+      reward:{ gold:180, items:{ moco_fur:2 } }
+    }
+  ];
+
+  const QUEST_MAP = Object.fromEntries(QUEST_DEFS.map(q => [q.id, q]));
+
   const baseSave = {
     level:1,
     exp:0,
@@ -335,7 +374,11 @@
     jobLevels:{ fighter:1, mage:1, thief:1 },
     weaponLevel:1,
     quests:{
-      puru_hunt:{ status:"none", progress:0, target:3 }
+      puru_hunt:{ status:"none", progress:0, target:3 },
+      jelly_collect:{ status:"locked", progress:0, target:3 },
+      first_craft:{ status:"locked", progress:0, target:1 },
+      kinokko_hunt:{ status:"locked", progress:0, target:3 },
+      moco_challenge:{ status:"locked", progress:0, target:1 }
     }
   };
 
@@ -378,7 +421,10 @@
     for(const id of Object.values(merged.equipment)){ if(id) merged.ownedEquip[id] = true; }
     merged.jobLevels = { ...base.jobLevels, ...(data?.jobLevels || {}) };
     merged.quests = { ...base.quests, ...(data?.quests || {}) };
-    merged.quests.puru_hunt = { ...base.quests.puru_hunt, ...(data?.quests?.puru_hunt || {}) };
+    for(const def of QUEST_DEFS){
+      merged.quests[def.id] = { ...base.quests[def.id], ...(data?.quests?.[def.id] || {}) };
+      merged.quests[def.id].target = def.target;
+    }
     if(!Number.isFinite(merged.weaponLevel)) merged.weaponLevel = 1;
     return merged;
   }
@@ -521,18 +567,64 @@
   function expToNext(){
     return Math.max(0, needExp() - save.exp);
   }
-  function quest(){
+  function quest(id="puru_hunt"){
     save.quests = save.quests || structuredClone(baseSave.quests);
-    save.quests.puru_hunt = { ...baseSave.quests.puru_hunt, ...(save.quests.puru_hunt || {}) };
-    return save.quests.puru_hunt;
+    const def = QUEST_MAP[id] || QUEST_DEFS[0];
+    save.quests[def.id] = { ...baseSave.quests[def.id], ...(save.quests[def.id] || {}), target:def.target };
+    return save.quests[def.id];
   }
-  function questLabel(){
-    const q = quest();
+  function questLabel(q=quest()){
     if(q.status === "none") return "未受注";
     if(q.status === "accepted") return `進行中 ${q.progress}/${q.target}`;
     if(q.status === "complete") return "報告可能";
     if(q.status === "cleared") return "達成済み";
+    if(q.status === "locked") return "未解放";
     return "未受注";
+  }
+
+  function currentGuideQuest(){
+    for(const def of QUEST_DEFS){
+      const q = quest(def.id);
+      if(q.status !== "cleared") return { def, q };
+    }
+    return { def:QUEST_DEFS[QUEST_DEFS.length - 1], q:quest(QUEST_DEFS[QUEST_DEFS.length - 1].id) };
+  }
+
+  function rewardText(reward={}){
+    const parts = [];
+    if(reward.gold) parts.push(`${reward.gold}G`);
+    for(const [id,count] of Object.entries(reward.items || {})){
+      parts.push(`${ITEMS[id]?.name || id}×${count}`);
+    }
+    return parts.join("、") || "なし";
+  }
+
+  function grantQuestReward(reward={}){
+    if(reward.gold) save.gold += reward.gold;
+    for(const [id,count] of Object.entries(reward.items || {})){
+      addItem(id, count);
+    }
+  }
+
+  function updateQuestProgress(type, targetId, count=1){
+    let changed = false;
+    for(const def of QUEST_DEFS){
+      const q = quest(def.id);
+      if(q.status !== "accepted" || def.type !== type) continue;
+      if(def.targetId !== "any" && def.targetId !== targetId) continue;
+      q.progress = Math.min(def.target, q.progress + count);
+      changed = true;
+      if(q.progress >= def.target){
+        q.status = "complete";
+        toast(`${def.title}達成！村の掲示板へ戻ろう`);
+      }else{
+        toast(`${def.title} ${q.progress}/${def.target}`);
+      }
+    }
+    if(changed){
+      persist();
+      syncUI();
+    }
   }
 
   function addExp(v){
@@ -608,7 +700,7 @@
     last = performance.now();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(loop);
-    toast("経験値カーブを重めに調整しました");
+    toast("v0.6.9 序盤クエスト導線を追加しました");
   }
 
   function initWorld(mapName){
@@ -845,18 +937,7 @@
     hitText(e.x, e.y - 55, `G+${gold}`, true);
     if(kind === "slash") hitText(e.x, e.y - 72, "一閃!", true);
 
-    if(e.id === "puru_slime"){
-      const q = quest();
-      if(q.status === "accepted"){
-        q.progress = Math.min(q.target, q.progress + 1);
-        if(q.progress >= q.target){
-          q.status = "complete";
-          toast("クエスト達成！村の掲示板へ戻ろう");
-        }else{
-          toast(`ぷるスライム退治 ${q.progress}/${q.target}`);
-        }
-      }
-    }
+    updateQuestProgress("kill", e.id, 1);
 
     const itemId = e.item;
     game.drops.push({
@@ -898,6 +979,7 @@
     for(const d of [...game.drops]){
       if(Math.hypot(d.x-game.p.x, d.y-game.p.y) < 46){
         addItem(d.id, d.count);
+        updateQuestProgress("item", d.id, d.count);
         const idx = game.drops.indexOf(d);
         if(idx >= 0) game.drops.splice(idx,1);
         picked++;
@@ -1059,6 +1141,7 @@
     save.gold -= recipe.gold;
     spendMaterials(recipe.materials);
     gainEquipment(id);
+    updateQuestProgress("craft", id, 1);
     persist();
     syncUI();
     toast(`${e.name}を作成しました`);
@@ -1322,67 +1405,88 @@
   }
 
   function renderQuestBoard(){
-    const q = quest();
     const box = $("facilityContent");
-    let action = "";
-    if(q.status === "none"){
-      action = `<button id="acceptPuruQuestBtn" class="green">受注する</button>`;
-    }else if(q.status === "accepted"){
-      action = `<button disabled>進行中</button>`;
-    }else if(q.status === "complete"){
-      action = `<button id="reportPuruQuestBtn" class="green">報告して報酬を受け取る</button>`;
-    }else{
-      action = `<button id="resetPuruQuestBtn" class="blue">再受注する</button>`;
-    }
+    const guide = currentGuideQuest();
     box.innerHTML = `
       <div class="facility-row">
-        <div class="row-head"><b>ぷるスライム退治</b><span class="quest-badge">${questLabel()}</span></div>
-        <p>目的：ひだまり草原でぷるスライムを3体倒す<br>進行：${q.progress}/${q.target}<br>報酬：50G、やくそう×2</p>
-        ${action}
+        <div class="row-head"><b>次の目標</b><span class="quest-badge">${guide.def.badge}</span></div>
+        <p>${guide.def.title}：${questLabel(guide.q)}<br>${guide.def.desc}</p>
       </div>
+      ${QUEST_DEFS.map(def => {
+        const q = quest(def.id);
+        const disabled = q.status === "locked" ? "disabled" : "";
+        let action = `<button disabled>${questLabel(q)}</button>`;
+        if(q.status === "none") action = `<button id="acceptQuest_${def.id}" class="green" ${disabled}>受注する</button>`;
+        if(q.status === "accepted") action = `<button disabled>進行中</button>`;
+        if(q.status === "complete") action = `<button id="reportQuest_${def.id}" class="green">報告して報酬を受け取る</button>`;
+        if(q.status === "cleared") action = `<button id="resetQuest_${def.id}" class="blue">再受注する</button>`;
+        return `
+          <div class="facility-row">
+            <div class="row-head"><b>${def.title}</b><span class="quest-badge">${questLabel(q)}</span></div>
+            <p>${def.desc}<br>進行：${q.progress}/${def.target}<br>報酬：${rewardText(def.reward)}</p>
+            ${action}
+          </div>`;
+      }).join("")}
       <div class="facility-row">
-        <div class="row-head"><b>掲示板</b><span>はじまりの依頼</span></div>
-        <p>まずは小さな討伐依頼から。受注したら草原へ向かいましょう。</p>
+        <div class="row-head"><b>掲示板</b><span>序盤ループ</span></div>
+        <p>依頼を受けて草原へ行き、素材を拾い、鍛冶屋で装備を作る。モコホーンはLv10前後の目標です。</p>
       </div>`;
     setTimeout(()=>{
-      const accept = $("acceptPuruQuestBtn");
-      const report = $("reportPuruQuestBtn");
-      const reset = $("resetPuruQuestBtn");
-      if(accept) accept.onclick = acceptPuruQuest;
-      if(report) report.onclick = reportPuruQuest;
-      if(reset) reset.onclick = resetPuruQuest;
+      for(const def of QUEST_DEFS){
+        const accept = $("acceptQuest_" + def.id);
+        const report = $("reportQuest_" + def.id);
+        const reset = $("resetQuest_" + def.id);
+        if(accept) accept.onclick = () => acceptQuest(def.id);
+        if(report) report.onclick = () => reportQuest(def.id);
+        if(reset) reset.onclick = () => resetQuest(def.id);
+      }
     },0);
   }
 
-  function acceptPuruQuest(){
-    const q = quest();
+  function acceptQuest(id){
+    const def = QUEST_MAP[id];
+    if(!def) return;
+    const q = quest(id);
+    if(q.status === "locked"){
+      toast("まだ解放されていません");
+      return;
+    }
     q.status = "accepted";
-    q.progress = 0;
+    q.progress = def.type === "item" ? Math.min(def.target, itemCount(def.targetId)) : 0;
+    if(q.progress >= def.target) q.status = "complete";
     persist();
     renderQuestBoard();
     syncUI();
     toast("クエストを受注しました");
   }
 
-  function reportPuruQuest(){
-    const q = quest();
+  function reportQuest(id){
+    const def = QUEST_MAP[id];
+    if(!def) return;
+    const q = quest(id);
     if(q.status !== "complete"){
       toast("まだ達成していません");
       return;
     }
     q.status = "cleared";
-    save.gold += 50;
-    addItem("herb", 2);
+    grantQuestReward(def.reward);
+    if(def.next){
+      const next = quest(def.next);
+      if(next.status === "locked") next.status = "none";
+    }
     persist();
     renderQuestBoard();
     syncUI();
     toast("報酬を受け取りました");
   }
 
-  function resetPuruQuest(){
-    const q = quest();
+  function resetQuest(id){
+    const def = QUEST_MAP[id];
+    if(!def) return;
+    const q = quest(id);
     q.status = "accepted";
-    q.progress = 0;
+    q.progress = def.type === "item" ? Math.min(def.target, itemCount(def.targetId)) : 0;
+    if(q.progress >= def.target) q.status = "complete";
     persist();
     renderQuestBoard();
     syncUI();
@@ -2601,7 +2705,8 @@ function drawPlayer(p){
       skillRoundBtn.title = `${job.skillName || "技"}：${skillStatusText()}`;
     }
 
-    $("questInfo").textContent = `ぷるスライム退治：${questLabel()}`;
+    const guide = currentGuideQuest();
+    $("questInfo").textContent = `${guide.def.title}：${questLabel(guide.q)}`;
   }
 
   function openBag(){
