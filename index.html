@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<title>ミニアランド v0.6.8.1 セーブ初期化修正版</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app">
+  <section id="titleScreen" class="screen active">
+    <div class="title-cloud c1"></div>
+    <div class="title-cloud c2"></div>
+    <div class="title-tree t1"></div>
+    <div class="title-tree t2"></div>
+    <div class="title-ground"></div>
+    <div class="title-panel">
+      <div class="logo">
+        <h1>ミニアランド</h1>
+        <p>ちいさな冒険者の見下ろしアクションRPG</p>
+      </div>
+      <div class="title-chars"><canvas id="titleCanvas"></canvas></div>
+      <div class="title-buttons">
+        <button id="newGameBtn" class="green">はじめる</button>
+        <button id="continueBtn" class="blue">つづきから</button>
+        <button id="titleResetBtn" class="red">セーブ初期化</button>
+      </div>
+      <div class="version">v0.6.8.1 セーブ初期化修正版 / 武器画像表示版</div>
+    </div>
+  </section>
+
+  <section id="gameScreen" class="screen">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="top-ui">
+      <div class="top-box lvbox">
+        <small>LV</small>
+        <b id="lvText">1</b>
+      </div>
+      <div class="top-box statbox">
+        <div class="statline"><span>EXP</span><div class="meter"><i id="expFill"></i></div><span id="expText">0/30</span></div>
+        <div class="statline"><span>HP</span><div class="meter"><i id="hpFill"></i></div><span id="hpText">100/100</span></div>
+        <div class="statline"><span>SP</span><div class="meter"><i id="spFill"></i></div><span id="spText">50/50</span></div>
+      </div>
+      <div class="top-box moneybox">
+        <div class="mapname" id="mapText">はじまりの村</div>
+        <div>G <span id="goldText">0</span></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast">ミニアランドへようこそ！</div>
+    <div id="jobHud" class="job-hud">職業：<span>ファイター</span></div>
+    <div class="debug-note" id="debugNote">debug</div>
+
+    <div id="stick" class="stick">
+      <div class="stick-base"></div>
+      <div id="stickKnob" class="stick-knob"></div>
+    </div>
+
+    <div class="attack-area">
+      <button id="pickupBtn" class="round-btn green">拾う</button>
+      <button id="skillRoundBtn" class="round-btn skill-round"><small>技</small><span>斬</span></button>
+      <button id="attackBtn" class="round-btn red">攻撃</button>
+    </div>
+
+    <div class="bottom-ui">
+      <div class="mini-actions">
+        <button id="chatBtn" class="blue">チャット</button>
+        <button id="goVillageBtn">村へ</button>
+        <button id="goFieldBtn" class="green">草原へ</button>
+      </div>
+      <div class="right-actions">
+        <button id="bagBtn">バッグ</button>
+        <button id="menuBtn" class="blue">メニュー</button>
+      </div>
+      <div class="shortcut-row">
+        <div class="slot"><small>1</small>薬</div>
+        <button id="skillBtn" class="slot skill-slot" type="button"><small>2</small><span id="skillSlotText">斬</span></button>
+        <div class="slot"><small>3</small>魔</div>
+        <div class="slot"><small>4</small>拾</div>
+        <div class="slot"><small>5</small>-</div>
+        <div class="slot"><small>6</small>-</div>
+        <div class="slot"><small>7</small>-</div>
+        <div class="slot"><small>8</small>-</div>
+      </div>
+    </div>
+
+    <div id="bagOverlay" class="panel-overlay">
+      <div class="wood-panel">
+        <div class="panel-head">
+          <h2>バッグ</h2>
+          <button class="close-btn" data-close="bagOverlay">閉じる</button>
+        </div>
+        <div id="bagContent" class="item-list"></div>
+      </div>
+    </div>
+
+    <div id="menuOverlay" class="panel-overlay">
+      <div class="wood-panel">
+        <div class="panel-head">
+          <h2>メニュー</h2>
+          <button class="close-btn" data-close="menuOverlay">閉じる</button>
+        </div>
+        <div class="menu-grid">
+          <div class="menu-card"><b>キャラ</b><p id="charInfo">Lv1 / ファイター</p></div>
+          <div class="menu-card"><b>装備</b><p id="equipInfo">旅人の服 / 木の剣 Lv1</p></div>
+          <div class="menu-card"><b>職業</b><p id="jobInfo">転職の館で変更できます</p></div>
+          <div class="menu-card"><b>クエスト</b><p id="questInfo">掲示板で受注できます</p></div>
+        </div>
+        <div style="margin-top:10px;display:grid;gap:8px;">
+          <button id="openEquipBtn" class="green">装備を開く</button>
+          <button id="saveBtn" class="green">セーブする</button>
+          <button id="menuResetBtn" class="red">セーブ初期化</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="facilityOverlay" class="panel-overlay">
+      <div class="wood-panel">
+        <div class="panel-head">
+          <h2 id="facilityTitle">施設</h2>
+          <button class="close-btn" data-close="facilityOverlay">閉じる</button>
+        </div>
+        <div id="facilityContent" class="facility-list"></div>
+      </div>
+    </div>
+
+    <div id="dialogueBox" class="dialogue-box">
+      <div class="dialogue-name" id="dialogueName">村人</div>
+      <div class="dialogue-text" id="dialogueText">こんにちは！</div>
+      <div class="dialogue-actions">
+        <button id="dialogueCloseBtn" class="blue">閉じる</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="js/main.js"></script>
+</body>
+</html>
