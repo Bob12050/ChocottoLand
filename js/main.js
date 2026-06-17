@@ -1,4 +1,4 @@
-// ミニアランド v0.6.9.2 レア素材・序盤武器拡張版
+// ミニアランド v0.6.9.3 メイジスキル追加版
 // v0.5.7 の安定版をベースに、CSS / JS / 画像素材を外部ファイル化。
 // 既存の移動・戦闘・装備・クエスト処理は維持。
 
@@ -326,11 +326,11 @@
       id:"mage", name:"メイジ", icon:"✦", type:"魔法型",
       hpRate:.85, spRate:1.45, atkRate:1.08, defRate:.86, speedRate:.96,
       cooldown:.62, range:150, cost:8,
-      skillName:"未実装", skillCost:0, skillCooldown:0,
-      skillDesc:"今後、火球・範囲魔法などを追加予定。",
+      skillName:"ファイアボルト", skillCost:14, skillCooldown:2.8,
+      skillDesc:"正面方向へ火の弾を放つメイジ専用スキル。遠くの単体へ高威力で攻撃できる。",
       summary:"SPを使って遠距離魔法を撃つ火力型。最大SPが高い。",
       attackName:"魔法弾",
-      tip:"正面方向へ遠距離攻撃。SPを消費するが安全に戦える。"
+      tip:"正面方向へ遠距離攻撃。専用スキル「ファイアボルト」はショートカット2で発動。"
     },
     thief: {
       id:"thief", name:"シーフ", icon:"🗡", type:"速度型",
@@ -594,15 +594,25 @@
   function skillReady(){
     const job = currentJob();
     if(!game.p) return false;
-    if(job.id !== "fighter") return false;
+    if(!hasJobSkill(job)) return false;
     if((game.skillCooldown || 0) > 0) return false;
     if(game.p.sp < (job.skillCost || 0)) return false;
     return true;
   }
 
+  function hasJobSkill(job=currentJob()){
+    return job.id === "fighter" || job.id === "mage";
+  }
+
+  function skillShortLabel(job=currentJob()){
+    if(job.id === "fighter") return "斬";
+    if(job.id === "mage") return "火";
+    return "-";
+  }
+
   function skillStatusText(){
     const job = currentJob();
-    if(job.id !== "fighter") return "準備中";
+    if(!hasJobSkill(job)) return "準備中";
     if(!game.p) return job.skillName || "技";
     if(game.p.sp < (job.skillCost || 0)) return "SP不足";
     if((game.skillCooldown || 0) > 0) return `CT ${game.skillCooldown.toFixed(1)}s`;
@@ -909,11 +919,9 @@
   function useJobSkill(){
     if(!game.p || game.sit) return;
     const job = currentJob();
-    if(job.id !== "fighter"){
-      toast(`${job.name}の専用スキルは準備中です`);
-      return;
-    }
-    fighterSlash();
+    if(job.id === "fighter") return fighterSlash();
+    if(job.id === "mage") return mageFirebolt();
+    toast(`${job.name}の専用スキルは準備中です`);
   }
 
   function fighterSlash(){
@@ -969,19 +977,75 @@
     syncUI();
   }
 
+  function mageFirebolt(){
+    const p = game.p;
+    const job = currentJob();
+    const cost = job.skillCost || 14;
+    const cd = job.skillCooldown || 2.8;
+
+    if(game.skillCooldown > 0){
+      toast(`ファイアボルト再使用まで ${game.skillCooldown.toFixed(1)}秒`);
+      syncUI();
+      return;
+    }
+    if(p.sp < cost){
+      toast(`SPが足りません / 必要SP ${cost}`);
+      syncUI();
+      return;
+    }
+
+    p.sp = Math.max(0, p.sp - cost);
+    game.skillCooldown = cd;
+    game.attackCooldown = Math.max(game.attackCooldown, .20);
+    p.attackTimer = .22;
+
+    const range = 210;
+    const arc = Math.PI * .20;
+    let target = null;
+    let targetDist = Infinity;
+    for(const e of [...game.enemies]){
+      const dx = e.x - p.x;
+      const dy = e.y - p.y;
+      const d = Math.hypot(dx,dy);
+      const a = Math.atan2(dy,dx);
+      const diff = Math.atan2(Math.sin(a-p.face), Math.cos(a-p.face));
+      if(d < range + e.r && Math.abs(diff) < arc && d < targetDist){
+        target = e;
+        targetDist = d;
+      }
+    }
+
+    const fxRange = target ? Math.max(34, Math.min(range, targetDist)) : range;
+    game.attackFx.push({kind:"mageFirebolt", x:p.x, y:p.y, a:p.face, life:.34, max:.34, range:fxRange});
+
+    if(target){
+      const fireRate = target.id === "moco_horn" ? 1.45 : target.id === "kinokko" ? 1.75 : 2.05;
+      const dmg = Math.round(atk() * fireRate * rand(.90,1.12));
+      damageEnemy(target, dmg, p.x, p.y, 42, "fire");
+      hitText(target.x, target.y - target.r - 28, "FIRE!", true);
+      burst(target.x, target.y, 16, "fire");
+      game.shake = Math.max(game.shake || 0, .10);
+      toast("ファイアボルト！");
+    }else{
+      burst(p.x + Math.cos(p.face)*range, p.y + Math.sin(p.face)*range, 8, "fire");
+      toast("ファイアボルト！");
+    }
+    syncUI();
+  }
+
   function damageEnemy(e, dmg, sx=null, sy=null, knock=0, kind="normal"){
     e.hp -= dmg;
-    e.hurt = kind === "slash" ? .26 : .18;
-    e.squash = kind === "slash" ? .22 : .13;
+    e.hurt = kind === "slash" ? .26 : kind === "fire" ? .22 : .18;
+    e.squash = kind === "slash" ? .22 : kind === "fire" ? .18 : .13;
     if(sx !== null && sy !== null && knock > 0){
       const a = Math.atan2(e.y - sy, e.x - sx);
       const kr = 1 - (e.knockResist || 0);
       e.knockX = (e.knockX || 0) + Math.cos(a) * knock * kr;
       e.knockY = (e.knockY || 0) + Math.sin(a) * knock * kr;
     }
-    const label = kind === "slash" ? `${dmg}!` : String(dmg);
-    hitText(e.x, e.y - e.r - 14, label, kind === "slash");
-    burst(e.x, e.y, kind === "slash" ? 15 : 9, kind === "slash" ? "slash" : "hit");
+    const label = kind === "slash" || kind === "fire" ? `${dmg}!` : String(dmg);
+    hitText(e.x, e.y - e.r - 14, label, kind === "slash" || kind === "fire");
+    burst(e.x, e.y, kind === "slash" ? 15 : kind === "fire" ? 13 : 9, kind === "slash" ? "slash" : kind === "fire" ? "fire" : "hit");
     if(e.hp <= 0) killEnemy(e, kind);
   }
 
@@ -2692,6 +2756,31 @@ function drawPlayer(p){
         for(let i=34;i<f.range;i+=26){ ctx.fillRect(i,-4,8,8); }
         ctx.fillStyle="#fff8df";
         ctx.fillRect(f.range-8,-8,16,16);
+      }else if(f.kind === "mageFirebolt"){
+        const glow = 1 + (1-rate) * 6;
+        ctx.strokeStyle="#ffd27a";
+        ctx.lineWidth=8;
+        ctx.lineCap="round";
+        ctx.beginPath();
+        ctx.moveTo(18,0);
+        ctx.lineTo(f.range,0);
+        ctx.stroke();
+        ctx.strokeStyle="#ff6a2a";
+        ctx.lineWidth=4;
+        ctx.beginPath();
+        ctx.moveTo(26,0);
+        ctx.lineTo(f.range,0);
+        ctx.stroke();
+        ctx.fillStyle="#fff2a8";
+        for(let i=40;i<f.range;i+=32){ ctx.fillRect(i,-3,10,6); }
+        ctx.fillStyle="#ff4b1f";
+        ctx.beginPath();
+        ctx.arc(f.range,0,10+glow,0,Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle="#fff8df";
+        ctx.beginPath();
+        ctx.arc(f.range-2,-2,5+glow*.35,0,Math.PI*2);
+        ctx.fill();
       }else if(f.kind === "thief"){
         ctx.strokeStyle="#d8ffe0";
         ctx.lineWidth=5;
@@ -2730,6 +2819,7 @@ function drawPlayer(p){
       else if(p.type==="level") ctx.fillStyle="#84e9ff";
       else if(p.type==="hurt") ctx.fillStyle="#ff665e";
       else if(p.type==="slash") ctx.fillStyle="#ffcc4d";
+      else if(p.type==="fire") ctx.fillStyle=p.life > p.max*.5 ? "#ff8b32" : "#fff2a8";
       else if(p.type==="miss") ctx.fillStyle="#b6c8d8";
       else ctx.fillStyle="#fff8df";
       ctx.fillRect(x-p.size/2,y-p.size/2,p.size,p.size);
@@ -2781,7 +2871,8 @@ function drawPlayer(p){
       jh.innerHTML = `職業：<span>${job.icon} ${job.name}</span> / ${job.attackName || "通常攻撃"} / 技：${job.skillName || "未実装"}${cd}`;
     }
     const skillText = $("skillSlotText");
-    const skillLabel = job.id === "fighter" ? (game.skillCooldown > 0 ? `斬${Math.ceil(game.skillCooldown)}` : "斬") : "準備";
+    const shortSkill = skillShortLabel(job);
+    const skillLabel = shortSkill === "-" ? "準備" : (game.skillCooldown > 0 ? `${shortSkill}${Math.ceil(game.skillCooldown)}` : shortSkill);
     if(skillText) skillText.textContent = skillLabel;
 
     const skillBtn = $("skillBtn");
@@ -2796,7 +2887,7 @@ function drawPlayer(p){
       const small = skillRoundBtn.querySelector("small");
       const span = skillRoundBtn.querySelector("span");
       if(small) small.textContent = game.skillCooldown > 0 ? `CT${Math.ceil(game.skillCooldown)}` : "技";
-      if(span) span.textContent = job.id === "fighter" ? "斬" : "-";
+      if(span) span.textContent = shortSkill;
       skillRoundBtn.classList.toggle("cooling", game.skillCooldown > 0);
       skillRoundBtn.classList.toggle("disabled-skill", !skillReady());
       skillRoundBtn.title = `${job.skillName || "技"}：${skillStatusText()}`;
