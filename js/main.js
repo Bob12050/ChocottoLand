@@ -1160,9 +1160,18 @@
     const parts = [];
     for(const [id, count] of Object.entries(materials || {})){
       const item = ITEMS[id] || { name:id };
-      parts.push(`${item.name}×${count}${itemCount(id) < count ? "不足" : ""}`);
+      const have = itemCount(id);
+      parts.push(`${item.name} ${have}/${count}${have < count ? " 不足" : ""}`);
     }
     return parts.length ? parts.join("、") : "なし";
+  }
+
+  function materialInventoryText(){
+    const materialIds = Object.keys(ITEMS).filter(id => ITEMS[id].type.includes("素材"));
+    return materialIds.map(id => {
+      const item = ITEMS[id];
+      return `<span class="material-chip ${item.type === "レア素材" ? "rare" : ""}">${item.icon} ${item.name}×${itemCount(id)}</span>`;
+    }).join("");
   }
 
   function canCraftEquipment(id){
@@ -1231,6 +1240,10 @@
       <div class="facility-row">
         <div class="row-head"><b>装備作成</b><span>v0.6</span></div>
         <p>${message}</p>
+      </div>
+      <div class="material-inventory">
+        <b>所持素材</b>
+        <div class="material-chip-row">${materialInventoryText()}</div>
       </div>
       <div class="equip-list">
         ${craftIds.map(id => {
@@ -2796,6 +2809,10 @@ function drawPlayer(p){
   function openBag(){
     const content = $("bagContent");
     content.innerHTML = "";
+    const materialPanel = document.createElement("div");
+    materialPanel.className = "material-inventory";
+    materialPanel.innerHTML = `<b>所持素材</b><div class="material-chip-row">${materialInventoryText()}</div>`;
+    content.appendChild(materialPanel);
     const entries = Object.entries(save.inventory).filter(([,n])=>n>0);
     if(entries.length === 0){
       content.innerHTML = `<div class="item-row"><b>バッグは空です</b><span>素材を拾うとここに入ります</span></div>`;
