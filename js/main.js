@@ -1,4 +1,4 @@
-// ミニアランド v0.6.9 序盤ループ強化版
+// ミニアランド v0.6.9.2 レア素材・序盤武器拡張版
 // v0.5.7 の安定版をベースに、CSS / JS / 画像素材を外部ファイル化。
 // 既存の移動・戦闘・装備・クエスト処理は維持。
 
@@ -19,8 +19,11 @@
 
   const ITEMS = {
     puru_jelly: { name:"ぷるゼリー", type:"素材", icon:"💧" },
+    puru_core: { name:"ぷるコア", type:"レア素材", icon:"🔷" },
     mushroom_grass: { name:"きのこ草", type:"素材", icon:"🍄" },
+    red_cap: { name:"赤いカサ", type:"レア素材", icon:"🍄" },
     moco_fur: { name:"モコ毛皮", type:"素材", icon:"🧶" },
+    moco_horn_piece: { name:"モコ角", type:"レア素材", icon:"🦴" },
     tiny_wing: { name:"小さな羽", type:"素材", icon:"🪶" },
     herb: { name:"やくそう", type:"消費", icon:"🌿" }
   };
@@ -38,28 +41,43 @@
   const EQUIPMENT = {
     wood_sword: {
       id:"wood_sword", name:"木の剣", icon:"⚔", slot:"weapon",
-      atk:3, hp:0, sp:0, speed:0,
+      allowedJobs:["fighter"], atk:3, hp:0, sp:0, speed:0,
       desc:"最初から持っている木製の剣。扱いやすい。"
     },
     iron_sword: {
       id:"iron_sword", name:"鉄の剣", icon:"🗡", slot:"weapon",
-      atk:9, hp:8, sp:0, speed:-2,
-      desc:"少し重いが攻撃力が高い剣。ファイター向け。"
+      allowedJobs:["fighter"], atk:9, hp:8, sp:0, speed:-2,
+      desc:"少し重いが攻撃力が高い剣。ファイター専用。"
+    },
+    moco_blade: {
+      id:"moco_blade", name:"モコブレード", icon:"🗡", slot:"weapon",
+      allowedJobs:["fighter"], atk:13, hp:12, sp:0, speed:-3,
+      desc:"モコホーン素材で作る片手剣。硬い敵へ挑むファイター専用武器。"
     },
     apprentice_staff: {
       id:"apprentice_staff", name:"見習いの杖", icon:"🔮", slot:"weapon",
-      atk:6, hp:0, sp:18, speed:0,
-      desc:"魔力を高める小さな杖。メイジ向け。"
+      allowedJobs:["mage"], atk:6, hp:0, sp:18, speed:0,
+      desc:"魔力を高める小さな杖。メイジ専用。"
+    },
+    mushroom_staff: {
+      id:"mushroom_staff", name:"キノコ杖", icon:"🍄", slot:"weapon",
+      allowedJobs:["mage"], atk:10, hp:0, sp:28, speed:0,
+      desc:"赤いカサを飾った魔法杖。SPが大きく伸びるメイジ専用武器。"
     },
     thief_dagger: {
       id:"thief_dagger", name:"盗賊の短剣", icon:"🗡", slot:"weapon",
-      atk:5, hp:0, sp:4, speed:10,
-      desc:"軽くて素早く振れる短剣。シーフ向け。"
+      allowedJobs:["thief"], atk:5, hp:0, sp:4, speed:10,
+      desc:"軽くて素早く振れる短剣。シーフ専用。"
+    },
+    puru_dagger: {
+      id:"puru_dagger", name:"ぷる短剣", icon:"🔪", slot:"weapon",
+      allowedJobs:["thief"], atk:8, hp:0, sp:8, speed:14,
+      desc:"ぷるコアを埋め込んだ軽い短剣。手数で戦うシーフ専用武器。"
     },
     flame_greatsword: {
       id:"flame_greatsword", name:"炎の大剣", icon:"🔥", slot:"weapon",
-      atk:16, hp:6, sp:0, speed:-4,
-      desc:"モコホーンの毛皮で鍛えた巨大な剣。重いが圧倒的な火力。"
+      allowedJobs:["sword_kaiser"], atk:16, hp:6, sp:0, speed:-4,
+      desc:"将来の上位職ソードカイザー向けに温存している巨大な大剣。今は開発者モードで見た目確認できます。"
     },
     cloth_cap: {
       id:"cloth_cap", name:"布の帽子", icon:"🧢", slot:"head",
@@ -68,13 +86,13 @@
     },
     mage_hat: {
       id:"mage_hat", name:"魔法使い帽", icon:"🎩", slot:"head",
-      atk:2, hp:0, sp:14, speed:0,
-      desc:"大きめの魔法帽。SPを伸ばす。"
+      allowedJobs:["mage"], atk:2, hp:0, sp:14, speed:0,
+      desc:"大きめの魔法帽。メイジ専用。"
     },
     thief_hood: {
       id:"thief_hood", name:"盗賊フード", icon:"🟩", slot:"head",
-      atk:1, hp:2, sp:2, speed:7,
-      desc:"軽く動きやすいフード。"
+      allowedJobs:["thief"], atk:1, hp:2, sp:2, speed:7,
+      desc:"軽く動きやすいフード。シーフ専用。"
     },
     traveler_cloth: {
       id:"traveler_cloth", name:"旅人の服", icon:"👕", slot:"body",
@@ -83,23 +101,23 @@
     },
     soldier_armor: {
       id:"soldier_armor", name:"兵士の鎧", icon:"🛡", slot:"body",
-      atk:1, hp:28, sp:0, speed:-5,
-      desc:"防御寄りの鎧。HPが大きく伸びる。"
+      allowedJobs:["fighter"], atk:1, hp:28, sp:0, speed:-5,
+      desc:"防御寄りの鎧。ファイター専用。"
     },
     apprentice_robe: {
       id:"apprentice_robe", name:"見習いローブ", icon:"🟪", slot:"body",
-      atk:1, hp:4, sp:22, speed:0,
-      desc:"メイジ向けの軽いローブ。"
+      allowedJobs:["mage"], atk:1, hp:4, sp:22, speed:0,
+      desc:"魔法職向けの軽いローブ。メイジ専用。"
     },
     thief_clothes: {
       id:"thief_clothes", name:"盗賊の軽装", icon:"🟢", slot:"body",
-      atk:1, hp:8, sp:4, speed:9,
-      desc:"素早さ重視の軽装。"
+      allowedJobs:["thief"], atk:1, hp:8, sp:4, speed:9,
+      desc:"素早さ重視の軽装。シーフ専用。"
     },
     small_shield: {
       id:"small_shield", name:"小さな盾", icon:"🛡", slot:"shield",
-      atk:0, hp:15, sp:0, speed:-2,
-      desc:"小型の盾。HPが少し増える。"
+      allowedJobs:["fighter"], atk:0, hp:15, sp:0, speed:-2,
+      desc:"小型の盾。ファイター専用。"
     },
     novice_cape: {
       id:"novice_cape", name:"見習いマント", icon:"🧣", slot:"back",
@@ -115,9 +133,11 @@
 
   const EQUIP_RECIPES = {
     iron_sword: { gold:80, materials:{ moco_fur:2 } },
-    flame_greatsword: { gold:150, materials:{ moco_fur:5, mushroom_grass:2 } },
     apprentice_staff: { gold:60, materials:{ mushroom_grass:2, puru_jelly:1 } },
     thief_dagger: { gold:60, materials:{ puru_jelly:3 } },
+    moco_blade: { gold:160, materials:{ moco_fur:5, moco_horn_piece:1 } },
+    mushroom_staff: { gold:80, materials:{ mushroom_grass:5, red_cap:1 } },
+    puru_dagger: { gold:60, materials:{ puru_jelly:5, puru_core:1 } },
     mage_hat: { gold:45, materials:{ mushroom_grass:2 } },
     thief_hood: { gold:45, materials:{ puru_jelly:2, moco_fur:1 } },
     soldier_armor: { gold:90, materials:{ moco_fur:3 } },
@@ -133,13 +153,16 @@
   const WEAPON_LOOKS = {
     wood_sword:       { type:"sword",  blade:"#dfe7ef", edge:"#f8fbff", grip:"#7a4f2b", guard:"#7a4f2b", len:33, w:5 },
     iron_sword:       { type:"sword",  blade:"#cbd6e0", edge:"#f0f5ff", grip:"#7a4f2b", guard:"#ffd24a", len:41, w:6 },
+    moco_blade:       { type:"sword",  blade:"#d8c184", edge:"#fff1b8", grip:"#6a4325", guard:"#986742", len:43, w:7 },
     flame_greatsword: { type:"sword",  blade:"#ff7a3c", edge:"#ffe08a", grip:"#5a2d18", guard:"#ffce4a", len:52, w:11, glow:"#ff5a1e",
       img:"weaponFlameGreatsword", gripAnchor:[0.30,0.74],
       view:{ down:{ox:16,oy:0,h:78,rot:-12,behind:false},
              up:  {ox:15,oy:-4,h:78,rot:-12,behind:true},
              side:{ox:24,oy:1,h:67,rot:0,behind:false} } },
     apprentice_staff: { type:"staff",  shaft:"#6b4324", orb:"#8fe8ff", core:"#fff8df", len:40 },
-    thief_dagger:     { type:"dagger", blade:"#dfe7ef", edge:"#f8fbff", grip:"#6b4324", guard:"#6b4324", len:22, w:5 }
+    mushroom_staff:   { type:"staff",  shaft:"#6b4324", orb:"#e87062", core:"#fff4c7", len:43 },
+    thief_dagger:     { type:"dagger", blade:"#dfe7ef", edge:"#f8fbff", grip:"#6b4324", guard:"#6b4324", len:22, w:5 },
+    puru_dagger:      { type:"dagger", blade:"#8fe8ff", edge:"#f8fbff", grip:"#356b7d", guard:"#6b4324", len:24, w:5 }
   };
   function weaponLook(id){ return WEAPON_LOOKS[id] || WEAPON_LOOKS.wood_sword; }
 
@@ -274,17 +297,17 @@
     puru_slime: {
       // 低レベル用。数を倒して少しずつ稼ぐ敵。
       id:"puru_slime", name:"ぷるスライム", hp:44, atk:5, exp:5, gold:4, r:16, speed:34,
-      item:"puru_jelly", color:"#59c7ff", sub:"#b9efff"
+      item:"puru_jelly", rareItem:"puru_core", rareRate:.12, color:"#59c7ff", sub:"#b9efff"
     },
     kinokko: {
       // Lv4〜8あたりの主な経験値源。
       id:"kinokko", name:"キノっこ", hp:72, atk:8, exp:11, gold:7, r:18, speed:30,
-      item:"mushroom_grass", color:"#e87062", sub:"#ffe3b0"
+      item:"mushroom_grass", rareItem:"red_cap", rareRate:.10, color:"#e87062", sub:"#ffe3b0"
     },
     moco_horn: {
       // Lv10推奨の序盤強敵。危険だが経験値とゴールドは高い。
       id:"moco_horn", name:"モコホーン", hp:600, atk:22, exp:80, gold:44, r:22, speed:30, knockResist:.82, stunResist:.8,
-      item:"moco_fur", color:"#e8d8a5", sub:"#986742"
+      item:"moco_fur", rareItem:"moco_horn_piece", rareRate:.20, color:"#e8d8a5", sub:"#986742"
     }
   };
 
@@ -319,6 +342,10 @@
       attackName:"連続短剣",
       tip:"射程は短いが攻撃間隔が短く、移動速度も速い。"
     }
+  };
+
+  const FUTURE_JOB_NAMES = {
+    sword_kaiser:"ソードカイザー"
   };
 
   const QUEST_DEFS = [
@@ -489,6 +516,7 @@
     game.shakeY = 0;
     game.sit = false;
     game.god = false;
+    game.devEquipmentPreview = false;
     game.keys.clear();
     input.x = 0;
     input.y = 0;
@@ -500,7 +528,39 @@
   function currentJob(){
     return Object.values(JOBS).find(j => j.name === save.currentJob) || JOBS.fighter;
   }
+  function jobNameById(id){
+    return JOBS[id]?.name || FUTURE_JOB_NAMES[id] || id;
+  }
+  function equipJobText(e){
+    if(!e?.allowedJobs?.length) return "共通";
+    return e.allowedJobs.map(jobNameById).join(" / ");
+  }
+  function canEquipForCurrentJob(e){
+    if(game.devEquipmentPreview && e?.id === "flame_greatsword") return true;
+    if(!e?.allowedJobs?.length) return true;
+    return e.allowedJobs.includes(currentJob().id);
+  }
+  function fallbackEquipmentForCurrentJob(){
+    return {
+      weapon: currentJob().id === "fighter" ? "wood_sword" : null,
+      body:"traveler_cloth",
+      head:"cloth_cap"
+    };
+  }
+  function ensureCurrentJobEquipment(){
+    const fallback = fallbackEquipmentForCurrentJob();
+    save.equipment = save.equipment || {};
+    save.ownedEquip = save.ownedEquip || {};
+    for(const [slot,id] of Object.entries(save.equipment)){
+      if(!id) continue;
+      const e = EQUIPMENT[id];
+      if(e && canEquipForCurrentJob(e)) continue;
+      save.equipment[slot] = fallback[slot] || null;
+      if(fallback[slot]) save.ownedEquip[fallback[slot]] = true;
+    }
+  }
   function equipStats(){
+    ensureCurrentJobEquipment();
     const result = { atk:0, hp:0, sp:0, speed:0 };
     const equips = save.equipment || {};
     for(const id of Object.values(equips)){
@@ -939,20 +999,29 @@
 
     updateQuestProgress("kill", e.id, 1);
 
-    const itemId = e.item;
-    game.drops.push({
-      x:e.x + rand(-12,12),
-      y:e.y + rand(-8,10),
-      id:itemId,
-      count:1,
-      life:999
-    });
+    dropItem(e.item, e.x, e.y);
+    if(e.rareItem && Math.random() < (e.rareRate || 0)){
+      dropItem(e.rareItem, e.x, e.y, true);
+      hitText(e.x, e.y - 88, `RARE ${ITEMS[e.rareItem]?.name || e.rareItem}!`, true);
+    }
     burst(e.x, e.y, kind === "slash" ? 24 : 18, kind === "slash" ? "slash" : "drop");
     game.shake = Math.max(game.shake || 0, kind === "slash" ? .16 : .08);
 
     if(game.map === "field"){
       setTimeout(()=>{ if(game.map==="field" && game.enemies.length < 7) spawnMonster(); }, 850);
     }
+  }
+
+  function dropItem(id, x, y, rare=false){
+    if(!id) return;
+    game.drops.push({
+      x:x + rand(-12,12),
+      y:y + rand(-8,10),
+      id,
+      count:1,
+      life:999,
+      rare
+    });
   }
 
   function playerDamage(amount){
@@ -1173,7 +1242,7 @@
             <div class="equip-item">
               <div class="equip-item-icon">${e.icon}</div>
               <div class="equip-item-desc">
-                <b>${e.name}</b> <span class="quest-badge">${EQUIP_SLOTS[e.slot]}</span>
+                <b>${e.name}</b> <span class="quest-badge">${EQUIP_SLOTS[e.slot]}</span> <span class="quest-badge">${equipJobText(e)}</span>
                 <small>${e.desc}<br>効果：ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}</small>
                 <span class="craft-cost">費用：${r.gold}G / 素材：${materialText(r.materials)}</span>
               </div>
@@ -1203,6 +1272,10 @@
   function equipItem(id){
     const e = EQUIPMENT[id];
     if(!e) return;
+    if(!canEquipForCurrentJob(e)){
+      toast(`${equipJobText(e)}専用装備です`);
+      return;
+    }
     save.ownedEquip = save.ownedEquip || {};
     if(!save.ownedEquip[id]){
       toast("未所持の装備です");
@@ -1257,7 +1330,7 @@
           return `
             <div class="equip-slot">
               <b>${label}<span>${e ? e.icon : "—"}</span></b>
-              <small>${e ? `${e.name}<br>ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}` : "未装備"}</small>
+              <small>${e ? `${e.name}<br>${equipJobText(e)} / ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}` : "未装備"}</small>
               ${e && slot !== "weapon" && slot !== "body" ? `<button id="unequip_${slot}" class="blue" style="margin-top:6px;padding:5px 7px;font-size:11px;">外す</button>` : ""}
             </div>`;
         }).join("")}
@@ -1270,14 +1343,15 @@
         ${shownIds.length ? shownIds.map(id => {
           const e = EQUIPMENT[id];
           const equipped = save.equipment?.[e.slot] === id;
+          const canEquip = canEquipForCurrentJob(e);
           return `
             <div class="equip-item">
               <div class="equip-item-icon">${e.icon}</div>
               <div class="equip-item-desc">
-                <b>${e.name}</b> <span class="quest-badge">${EQUIP_SLOTS[e.slot]}</span>
+                <b>${e.name}</b> <span class="quest-badge">${EQUIP_SLOTS[e.slot]}</span> <span class="quest-badge">${equipJobText(e)}</span>
                 <small>${e.desc}<br>ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}</small>
               </div>
-              ${equipped ? `<span class="job-now">装備中</span>` : `<button id="equip_${id}" class="green">装備</button>`}
+              ${!canEquip ? `<button disabled>専用外</button>` : equipped ? `<span class="job-now">装備中</span>` : `<button id="equip_${id}" class="green">装備</button>`}
             </div>`;
         }).join("") : `<div class="facility-row"><b>この部位の装備は未所持です</b><p>鍛冶屋で装備を作成できます。</p></div>`}
       </div>`;
@@ -1360,6 +1434,7 @@
     save.currentJob = job.name;
     save.jobLevels = save.jobLevels || { fighter:1, mage:1, thief:1 };
     save.jobLevels[jobId] = save.jobLevels[jobId] || 1;
+    ensureCurrentJobEquipment();
     if(game.p){
       game.p.maxHp = maxHp();
       game.p.maxSp = maxSp();
@@ -2133,13 +2208,22 @@
     ctx.translate(x,y);
     ctx.fillStyle="rgba(0,0,0,.18)";
     ctx.fillRect(-8,8,16,5);
-    ctx.fillStyle="#fff2a8";
-    ctx.strokeStyle="#8b5a25";
+    ctx.fillStyle=d.rare ? "#dff7ff" : "#fff2a8";
+    ctx.strokeStyle=d.rare ? "#3a87b7" : "#8b5a25";
     ctx.lineWidth=2;
     ctx.beginPath();
     ctx.arc(0,0,10 + Math.sin(game.time*5)*1.2,0,Math.PI*2);
     ctx.fill();
     ctx.stroke();
+    if(d.rare){
+      ctx.globalAlpha=.5;
+      ctx.strokeStyle="#8fe8ff";
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.arc(0,0,14 + Math.sin(game.time*7)*1.6,0,Math.PI*2);
+      ctx.stroke();
+      ctx.globalAlpha=1;
+    }
     ctx.font="14px system-ui";
     ctx.textAlign="center";
     ctx.textBaseline="middle";
@@ -2350,7 +2434,7 @@ function drawPlayer(p){
     const x = screenX(p.x), y = screenY(p.y);
     const job = currentJob();
     const equips = save.equipment || {};
-    const weaponId = equips.weapon || "wood_sword";
+    const weaponId = equips.weapon || null;
     const headId = equips.head || null;
     const shieldId = equips.shield || null;
     const backId = equips.back || null;
@@ -2423,9 +2507,9 @@ function drawPlayer(p){
     }
 
     // 画像武器（透過PNG）の判定。あれば四角描画の代わりに画像を重ねる。
-    const wlook = weaponLook(weaponId);
-    const wimg = wlook.img ? spriteAssets[wlook.img] : null;
-    const useWimg = !!(wlook.img && spriteReady(wimg) && wlook.view);
+    const wlook = weaponId ? weaponLook(weaponId) : null;
+    const wimg = wlook?.img ? spriteAssets[wlook.img] : null;
+    const useWimg = !!(wlook && wlook.img && spriteReady(wimg) && wlook.view);
     const wview = isSide ? "side" : (dir === "up" ? "up" : "down");
     const wcfg = useWimg ? wlook.view[wview] : null;
     const wBehind = !!(wcfg && wcfg.behind);
@@ -2500,7 +2584,7 @@ function drawPlayer(p){
           ctx.fillRect(-16,-4 + weaponBob,6,10);
         }
 
-        if(!useWimg) drawWeaponSideShape(weaponLook(weaponId), thrust, weaponBob);
+        if(weaponId && !useWimg) drawWeaponSideShape(weaponLook(weaponId), thrust, weaponBob);
 
         if(accessoryId === "bronze_ring"){
           ctx.fillStyle="#d8923a";
@@ -2516,7 +2600,7 @@ function drawPlayer(p){
         const swing = p.attackTimer > 0 ? Math.sin((.18-p.attackTimer)/.18*Math.PI)*.55 : 0;
         ctx.rotate(-.35 + swing);
 
-        if(!useWimg) drawWeaponFrontShape(weaponLook(weaponId));
+        if(weaponId && !useWimg) drawWeaponFrontShape(weaponLook(weaponId));
         ctx.restore();
 
         if(shieldId === "small_shield"){
@@ -2944,9 +3028,17 @@ function drawPlayer(p){
       panel.appendChild(b);
       return b;
     };
-    mk("⚔ 炎の大剣を即装備", ()=>{ gainEquipment("flame_greatsword"); equipItem("flame_greatsword"); devRefreshPlayer(false); persist(); syncUI(); toast("炎の大剣を装備"); }, "#7a3a1e");
+    mk("⚔ 炎の大剣を表示確認", ()=>{
+      game.devEquipmentPreview = true;
+      gainEquipment("flame_greatsword");
+      equipItem("flame_greatsword");
+      devRefreshPlayer(false);
+      persist();
+      syncUI();
+      toast("炎の大剣を表示確認中");
+    }, "#7a3a1e");
     mk("🎽 全装備を解放", ()=>{ for(const id of Object.keys(EQUIPMENT)) gainEquipment(id); persist(); toast("全装備を解放（装備画面から選べます）"); });
-    mk("🧶 全素材 +10", ()=>{ for(const id of ["puru_jelly","mushroom_grass","moco_fur","tiny_wing"]) addItem(id,10); persist(); syncUI(); toast("全素材+10"); });
+    mk("🧶 全素材 +10", ()=>{ for(const id of ["puru_jelly","puru_core","mushroom_grass","red_cap","moco_fur","moco_horn_piece","tiny_wing"]) addItem(id,10); persist(); syncUI(); toast("全素材+10"); });
     mk("💰 ゴールド +1000", ()=>{ save.gold += 1000; persist(); syncUI(); toast("G+1000"); }, "#6b5a1e");
     mk("⬆ レベル +1", ()=>{ save.level += 1; devRefreshPlayer(true); persist(); syncUI(); toast("Lv"+save.level); });
     mk("⏫ レベル +5", ()=>{ save.level += 5; devRefreshPlayer(true); persist(); syncUI(); toast("Lv"+save.level); });
