@@ -185,10 +185,16 @@
   const USER_PLAYER_SIDE_PNG = "assets/characters/player_side.png";
   const USER_PLAYER_FRONTA_PNG = "assets/characters/player_front_walk_a.png";
   const USER_PLAYER_FRONTB_PNG = "assets/characters/player_front_walk_b.png";
+  const USER_PLAYER_FRONTC_PNG = "assets/characters/player_front_walk_c.png";
+  const USER_PLAYER_FRONTD_PNG = "assets/characters/player_front_walk_d.png";
   const USER_PLAYER_BACKA_PNG = "assets/characters/player_back_walk_a.png";
   const USER_PLAYER_BACKB_PNG = "assets/characters/player_back_walk_b.png";
+  const USER_PLAYER_BACKC_PNG = "assets/characters/player_back_walk_c.png";
+  const USER_PLAYER_BACKD_PNG = "assets/characters/player_back_walk_d.png";
   const USER_PLAYER_SIDEA_PNG = "assets/characters/player_side_walk_a.png";
   const USER_PLAYER_SIDEB_PNG = "assets/characters/player_side_walk_b.png";
+  const USER_PLAYER_SIDEC_PNG = "assets/characters/player_side_walk_c.png";
+  const USER_PLAYER_SIDED_PNG = "assets/characters/player_side_walk_d.png";
   const USER_PURU_SLIME_PNG = "assets/monsters/puru_slime.png";
   const USER_FLAME_GREATSWORD_PNG = "assets/equipment/flame_greatsword.png";
 
@@ -295,10 +301,16 @@
     loadPngSprite("playerSide", USER_PLAYER_SIDE_PNG);
     loadPngSprite("playerFrontA", USER_PLAYER_FRONTA_PNG);
     loadPngSprite("playerFrontB", USER_PLAYER_FRONTB_PNG);
+    loadPngSprite("playerFrontC", USER_PLAYER_FRONTC_PNG);
+    loadPngSprite("playerFrontD", USER_PLAYER_FRONTD_PNG);
     loadPngSprite("playerBackA", USER_PLAYER_BACKA_PNG);
     loadPngSprite("playerBackB", USER_PLAYER_BACKB_PNG);
+    loadPngSprite("playerBackC", USER_PLAYER_BACKC_PNG);
+    loadPngSprite("playerBackD", USER_PLAYER_BACKD_PNG);
     loadPngSprite("playerSideA", USER_PLAYER_SIDEA_PNG);
     loadPngSprite("playerSideB", USER_PLAYER_SIDEB_PNG);
+    loadPngSprite("playerSideC", USER_PLAYER_SIDEC_PNG);
+    loadPngSprite("playerSideD", USER_PLAYER_SIDED_PNG);
     loadSvgSprite("fighter", SPRITE_ASSET_TEXT.fighter);
     loadPngSprite("slimeBlue", USER_PURU_SLIME_PNG);
     loadPngSprite("weaponFlameGreatsword", USER_FLAME_GREATSWORD_PNG);
@@ -4536,15 +4548,20 @@ function drawPlayer(p){
     const drawX = x;
     const drawY = y - 2 + baseBob - sideStepLift;
 
+    const walkFrame = isMoving ? Math.floor(t * 8) % 4 : 0;
     let baseImg = null;
     if(dir === "up"){
-      const walkPhase = isMoving ? Math.floor(t * 7) % 2 : 0;
-      baseImg = walkPhase === 0 ? spriteAssets.playerBackA : spriteAssets.playerBackB;
+      const frames = [spriteAssets.playerBackA, spriteAssets.playerBackB, spriteAssets.playerBackC, spriteAssets.playerBackD];
+      baseImg = isMoving ? frames[walkFrame] : spriteAssets.playerBack;
+      if(!baseImg) baseImg = spriteAssets.playerBackA || spriteAssets.playerBackB || spriteAssets.playerBack;
     }else if(isSide){
-      baseImg = spriteAssets.playerSide || spriteAssets.playerSideA || spriteAssets.playerSideB;
+      const frames = [spriteAssets.playerSideA, spriteAssets.playerSideB, spriteAssets.playerSideC, spriteAssets.playerSideD];
+      baseImg = isMoving ? frames[walkFrame] : spriteAssets.playerSide;
+      if(!baseImg) baseImg = spriteAssets.playerSideA || spriteAssets.playerSideB || spriteAssets.playerSide;
     }else{
-      const walkPhase = isMoving ? Math.floor(t * 7) % 2 : 0;
-      baseImg = walkPhase === 0 ? spriteAssets.playerFrontA : spriteAssets.playerFrontB;
+      const frames = [spriteAssets.playerFrontA, spriteAssets.playerFrontB, spriteAssets.playerFrontC, spriteAssets.playerFrontD];
+      baseImg = isMoving ? frames[walkFrame] : spriteAssets.playerFront;
+      if(!baseImg) baseImg = spriteAssets.playerFrontA || spriteAssets.playerFrontB || spriteAssets.playerFront;
     }
 
     const flipX = dir === "left";
