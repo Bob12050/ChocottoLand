@@ -195,10 +195,6 @@
   const USER_PLAYER_SIDEB_PNG = "assets/characters/player_side_walk_b.png";
   const USER_PLAYER_SIDEC_PNG = "assets/characters/player_side_walk_c.png";
   const USER_PLAYER_SIDED_PNG = "assets/characters/player_side_walk_d.png";
-  const USER_PLAYER_SIDE_LEFTA_PNG = "assets/characters/player_side_left_walk_a.png";
-  const USER_PLAYER_SIDE_LEFTB_PNG = "assets/characters/player_side_left_walk_b.png";
-  const USER_PLAYER_SIDE_LEFTC_PNG = "assets/characters/player_side_left_walk_c.png";
-  const USER_PLAYER_SIDE_LEFTD_PNG = "assets/characters/player_side_left_walk_d.png";
   const USER_PLAYER_ATTACK_FRONTA_PNG = "assets/characters/player_attack_front_a.png";
   const USER_PLAYER_ATTACK_FRONTB_PNG = "assets/characters/player_attack_front_b.png";
   const USER_PLAYER_ATTACK_FRONTC_PNG = "assets/characters/player_attack_front_c.png";
@@ -327,10 +323,6 @@
     loadPngSprite("playerSideB", USER_PLAYER_SIDEB_PNG);
     loadPngSprite("playerSideC", USER_PLAYER_SIDEC_PNG);
     loadPngSprite("playerSideD", USER_PLAYER_SIDED_PNG);
-    loadPngSprite("playerSideLeftA", USER_PLAYER_SIDE_LEFTA_PNG);
-    loadPngSprite("playerSideLeftB", USER_PLAYER_SIDE_LEFTB_PNG);
-    loadPngSprite("playerSideLeftC", USER_PLAYER_SIDE_LEFTC_PNG);
-    loadPngSprite("playerSideLeftD", USER_PLAYER_SIDE_LEFTD_PNG);
     loadPngSprite("playerAttackFrontA", USER_PLAYER_ATTACK_FRONTA_PNG);
     loadPngSprite("playerAttackFrontB", USER_PLAYER_ATTACK_FRONTB_PNG);
     loadPngSprite("playerAttackFrontC", USER_PLAYER_ATTACK_FRONTC_PNG);
@@ -4626,32 +4618,24 @@ function drawPlayer(p){
     const step = isMoving ? Math.sin(t * 15) : 0;
     const footPhase = isMoving ? Math.floor(t * 8) % 2 : 0;
 
-    // 横歩きは新しい左右別4コマを使い、歩幅が見える程度に上下を強める。
-    const baseBob = game.sit ? 3 : Math.sin(p.bob) * (isSide ? 0.75 : 1.15);
-    const sideStepLift = isSide && isMoving ? Math.abs(step) * 1.25 : 0;
+    // 横向きは安定した小さめ表示に戻し、足元演出と軽い上下だけで歩行感を出す。
+    const baseBob = game.sit ? 3 : Math.sin(p.bob) * (isSide ? 0.55 : 1.15);
+    const sideStepLift = isSide && isMoving ? Math.abs(step) * 0.9 : 0;
 
     const walkFrame = isMoving ? Math.floor(t * 8) % 4 : 0;
     const flipX = dir === "left";
     const sign = flipX ? -1 : 1;
-    const sideStrideX = isSide && isMoving ? sign * (footPhase === 0 ? 1 : -1) : 0;
-    const drawX = x + sideStrideX;
+    const drawX = x;
     const drawY = y - 2 + baseBob - sideStepLift;
 
     let baseImg = null;
-    let sideNativeLeft = false;
     if(dir === "up"){
       const frames = [spriteAssets.playerBackA, spriteAssets.playerBackB, spriteAssets.playerBackC, spriteAssets.playerBackD];
       baseImg = isMoving ? frames[walkFrame] : spriteAssets.playerBack;
       if(!baseImg) baseImg = spriteAssets.playerBackA || spriteAssets.playerBackB || spriteAssets.playerBack;
     }else if(isSide){
       const frames = [spriteAssets.playerSideA, spriteAssets.playerSideB, spriteAssets.playerSideC, spriteAssets.playerSideD];
-      const leftFrames = [spriteAssets.playerSideLeftA, spriteAssets.playerSideLeftB, spriteAssets.playerSideLeftC, spriteAssets.playerSideLeftD];
-      if(isMoving && dir === "left" && spriteReady(leftFrames[walkFrame])){
-        baseImg = leftFrames[walkFrame];
-        sideNativeLeft = true;
-      }else{
-        baseImg = isMoving ? frames[walkFrame] : spriteAssets.playerSide;
-      }
+      baseImg = isMoving ? frames[walkFrame] : spriteAssets.playerSide;
       if(!baseImg) baseImg = spriteAssets.playerSideA || spriteAssets.playerSideB || spriteAssets.playerSide;
     }else{
       const frames = [spriteAssets.playerFrontA, spriteAssets.playerFrontB, spriteAssets.playerFrontC, spriteAssets.playerFrontD];
@@ -4717,8 +4701,8 @@ function drawPlayer(p){
       try{
         ctx.save();
         ctx.translate(Math.round(drawX), Math.round(drawY + (usingAttackSprite ? -2 : 0)));
-        const spriteScale = usingAttackSprite ? (attackSprite.flip ? -1 : 1) : (isSide && !sideNativeLeft ? sign : 1);
-        const spriteSize = usingAttackSprite ? 68 : (isSide && isMoving ? 60 : 54);
+        const spriteScale = usingAttackSprite ? (attackSprite.flip ? -1 : 1) : (isSide ? sign : 1);
+        const spriteSize = usingAttackSprite ? 68 : 54;
         if(spriteScale !== 1) ctx.scale(spriteScale, 1);
         ctx.drawImage(baseImg, -spriteSize/2, -spriteSize/2, spriteSize, spriteSize);
         ctx.restore();

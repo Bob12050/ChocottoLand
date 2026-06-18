@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <title>ミニアランド v0.6.15.34 モーション確認室</title>
+  <title>ミニアランド v0.6.15.35 モーション確認室</title>
   <style>
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     html,body{
@@ -153,7 +153,7 @@
   <main class="app">
     <div class="topbar">
       <b>ミニアランド モーション確認室</b>
-      <span>v0.6.15.34</span>
+      <span>v0.6.15.35</span>
     </div>
 
     <section class="panel">
@@ -211,7 +211,7 @@
       { id:"rightIdle", label:"右 停止", tag:"base", view:"right", frames:["player_side.png"], kind:"idle" },
       { id:"leftIdle", label:"左 停止", tag:"反転確認", view:"left", frames:["player_side.png"], kind:"idle", mirror:true },
       { id:"rightWalk", label:"右 歩き", tag:"4コマ", view:"right", frames:["player_side_walk_a.png","player_side_walk_b.png","player_side_walk_c.png","player_side_walk_d.png"], kind:"walk" },
-      { id:"leftWalk", label:"左 歩き", tag:"専用4コマ", view:"left", frames:["player_side_left_walk_a.png","player_side_left_walk_b.png","player_side_left_walk_c.png","player_side_left_walk_d.png"], kind:"walk" },
+      { id:"leftWalk", label:"左 歩き", tag:"反転4コマ", view:"left", frames:["player_side_walk_a.png","player_side_walk_b.png","player_side_walk_c.png","player_side_walk_d.png"], kind:"walk", mirror:true },
       { id:"frontAttack", label:"前 攻撃", tag:"剣", view:"front", frames:["player_attack_front_a.png","player_attack_front_b.png","player_attack_front_c.png","player_attack_front_d.png"], kind:"attack" },
       { id:"backAttack", label:"後ろ 攻撃", tag:"剣", view:"back", frames:["player_attack_back_a.png","player_attack_back_b.png","player_attack_back_c.png","player_attack_back_d.png"], kind:"attack" },
       { id:"rightAttack", label:"右 攻撃", tag:"剣", view:"right", frames:["player_attack_side_a.png","player_attack_side_b.png","player_attack_side_c.png","player_attack_side_d.png"], kind:"attack" },
