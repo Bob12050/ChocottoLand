@@ -195,6 +195,18 @@
   const USER_PLAYER_SIDEB_PNG = "assets/characters/player_side_walk_b.png";
   const USER_PLAYER_SIDEC_PNG = "assets/characters/player_side_walk_c.png";
   const USER_PLAYER_SIDED_PNG = "assets/characters/player_side_walk_d.png";
+  const USER_PLAYER_ATTACK_FRONTA_PNG = "assets/characters/player_attack_front_a.png";
+  const USER_PLAYER_ATTACK_FRONTB_PNG = "assets/characters/player_attack_front_b.png";
+  const USER_PLAYER_ATTACK_FRONTC_PNG = "assets/characters/player_attack_front_c.png";
+  const USER_PLAYER_ATTACK_FRONTD_PNG = "assets/characters/player_attack_front_d.png";
+  const USER_PLAYER_ATTACK_BACKA_PNG = "assets/characters/player_attack_back_a.png";
+  const USER_PLAYER_ATTACK_BACKB_PNG = "assets/characters/player_attack_back_b.png";
+  const USER_PLAYER_ATTACK_BACKC_PNG = "assets/characters/player_attack_back_c.png";
+  const USER_PLAYER_ATTACK_BACKD_PNG = "assets/characters/player_attack_back_d.png";
+  const USER_PLAYER_ATTACK_SIDEA_PNG = "assets/characters/player_attack_side_a.png";
+  const USER_PLAYER_ATTACK_SIDEB_PNG = "assets/characters/player_attack_side_b.png";
+  const USER_PLAYER_ATTACK_SIDEC_PNG = "assets/characters/player_attack_side_c.png";
+  const USER_PLAYER_ATTACK_SIDED_PNG = "assets/characters/player_attack_side_d.png";
   const USER_PURU_SLIME_PNG = "assets/monsters/puru_slime.png";
   const USER_FLAME_GREATSWORD_PNG = "assets/equipment/flame_greatsword.png";
 
@@ -311,6 +323,18 @@
     loadPngSprite("playerSideB", USER_PLAYER_SIDEB_PNG);
     loadPngSprite("playerSideC", USER_PLAYER_SIDEC_PNG);
     loadPngSprite("playerSideD", USER_PLAYER_SIDED_PNG);
+    loadPngSprite("playerAttackFrontA", USER_PLAYER_ATTACK_FRONTA_PNG);
+    loadPngSprite("playerAttackFrontB", USER_PLAYER_ATTACK_FRONTB_PNG);
+    loadPngSprite("playerAttackFrontC", USER_PLAYER_ATTACK_FRONTC_PNG);
+    loadPngSprite("playerAttackFrontD", USER_PLAYER_ATTACK_FRONTD_PNG);
+    loadPngSprite("playerAttackBackA", USER_PLAYER_ATTACK_BACKA_PNG);
+    loadPngSprite("playerAttackBackB", USER_PLAYER_ATTACK_BACKB_PNG);
+    loadPngSprite("playerAttackBackC", USER_PLAYER_ATTACK_BACKC_PNG);
+    loadPngSprite("playerAttackBackD", USER_PLAYER_ATTACK_BACKD_PNG);
+    loadPngSprite("playerAttackSideA", USER_PLAYER_ATTACK_SIDEA_PNG);
+    loadPngSprite("playerAttackSideB", USER_PLAYER_ATTACK_SIDEB_PNG);
+    loadPngSprite("playerAttackSideC", USER_PLAYER_ATTACK_SIDEC_PNG);
+    loadPngSprite("playerAttackSideD", USER_PLAYER_ATTACK_SIDED_PNG);
     loadSvgSprite("fighter", SPRITE_ASSET_TEXT.fighter);
     loadPngSprite("slimeBlue", USER_PURU_SLIME_PNG);
     loadPngSprite("weaponFlameGreatsword", USER_FLAME_GREATSWORD_PNG);
@@ -2292,6 +2316,7 @@
     if(job.cost) p.sp = Math.max(0, p.sp - job.cost);
     game.attackCooldown = attackCooldown(job);
     p.attackTimer = .18;
+    p.attackAnimMax = p.attackTimer;
     const range = job.range;
     game.attackFx.push({kind:job.id,x:p.x,y:p.y,a:p.face,life:.18,max:.18,range});
     let hit = false;
@@ -2350,6 +2375,7 @@
     game.skillCooldown = cd;
     game.attackCooldown = Math.max(game.attackCooldown, .18);
     p.attackTimer = .24;
+    p.attackAnimMax = p.attackTimer;
 
     const range = 82;
     const arc = Math.PI * .76;
@@ -2405,6 +2431,7 @@
     game.skillCooldown = cd;
     game.attackCooldown = Math.max(game.attackCooldown, .20);
     p.attackTimer = .22;
+    p.attackAnimMax = p.attackTimer;
 
     const range = 210;
     const arc = Math.PI * .20;
@@ -2472,6 +2499,7 @@
     game.skillCooldown = cd;
     game.attackCooldown = Math.max(game.attackCooldown, .18);
     p.attackTimer = .18;
+    p.attackAnimMax = p.attackTimer;
 
     const before = p.hp;
     const heal = priestHealAmount();
@@ -4523,6 +4551,51 @@ function drawCave(){
     ctx.restore();
   }
 
+  function canUseSwordAttackSprite(weaponId){
+    if(!weaponId) return false;
+    const look = weaponLook(weaponId);
+    return !!look && look.type !== "staff";
+  }
+
+  function playerAttackSpriteInfo(p, weaponId){
+    if(!p || p.attackTimer <= 0 || !canUseSwordAttackSprite(weaponId)) return null;
+    const max = Math.max(.08, p.attackAnimMax || .18);
+    const progress = clamp(1 - p.attackTimer / max, 0, .999);
+    const frame = Math.min(3, Math.floor(progress * 4));
+    const suffix = ["A","B","C","D"][frame];
+    const a = Number.isFinite(p.face) ? p.face : 0;
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    let frames;
+    let flip = false;
+    if(Math.abs(dx) >= Math.abs(dy) * .92){
+      frames = [
+        spriteAssets.playerAttackSideA,
+        spriteAssets.playerAttackSideB,
+        spriteAssets.playerAttackSideC,
+        spriteAssets.playerAttackSideD
+      ];
+      flip = dx < 0;
+    }else if(dy < 0){
+      frames = [
+        spriteAssets.playerAttackBackA,
+        spriteAssets.playerAttackBackB,
+        spriteAssets.playerAttackBackC,
+        spriteAssets.playerAttackBackD
+      ];
+    }else{
+      frames = [
+        spriteAssets.playerAttackFrontA,
+        spriteAssets.playerAttackFrontB,
+        spriteAssets.playerAttackFrontC,
+        spriteAssets.playerAttackFrontD
+      ];
+    }
+    const img = frames[frame];
+    if(!spriteReady(img)) return null;
+    return { img, flip, frame:suffix };
+  }
+
 function drawPlayer(p){
     const x = screenX(p.x), y = screenY(p.y);
     const job = currentJob();
@@ -4566,6 +4639,9 @@ function drawPlayer(p){
 
     const flipX = dir === "left";
     const sign = flipX ? -1 : 1;
+    const attackSprite = playerAttackSpriteInfo(p, weaponId);
+    const usingAttackSprite = !!attackSprite;
+    if(usingAttackSprite) baseImg = attackSprite.img;
 
     // 足元影
     ctx.save();
@@ -4612,7 +4688,7 @@ function drawPlayer(p){
     const wcfg = useWimg ? wlook.view[wview] : null;
     const wBehind = !!(wcfg && wcfg.behind);
 
-    if(useWimg && wcfg && wBehind){
+    if(useWimg && wcfg && wBehind && !usingAttackSprite){
       drawWeaponImageLayer(wimg, wlook, wcfg, p, isSide, sign, baseBob, sideStepLift);
     }
 
@@ -4620,13 +4696,11 @@ function drawPlayer(p){
     if(spriteReady(baseImg)){
       try{
         ctx.save();
-        ctx.translate(Math.round(drawX), Math.round(drawY));
-        if(isSide){
-          ctx.scale(sign, 1);
-          ctx.drawImage(baseImg, -27, -27, 54, 54);
-        }else{
-          ctx.drawImage(baseImg, -27, -27, 54, 54);
-        }
+        ctx.translate(Math.round(drawX), Math.round(drawY + (usingAttackSprite ? -4 : 0)));
+        const spriteScale = usingAttackSprite ? (attackSprite.flip ? -1 : 1) : (isSide ? sign : 1);
+        const spriteSize = usingAttackSprite ? 76 : 54;
+        if(spriteScale !== 1) ctx.scale(spriteScale, 1);
+        ctx.drawImage(baseImg, -spriteSize/2, -spriteSize/2, spriteSize, spriteSize);
         ctx.restore();
         drawn = true;
       }catch(_){
@@ -4635,6 +4709,17 @@ function drawPlayer(p){
     }
 
     if(drawn){
+      if(usingAttackSprite){
+        ctx.fillStyle="#fff8df";
+        ctx.font="900 10px system-ui";
+        ctx.textAlign="center";
+        ctx.strokeStyle="#1f3145";
+        ctx.lineWidth=3;
+        ctx.strokeText(job.name, x, y-58);
+        ctx.fillText(job.name, x, y-58);
+        return;
+      }
+
       ctx.save();
       ctx.translate(x, y + baseBob - sideStepLift);
 
