@@ -3,48 +3,82 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-<title>ミニアランド v0.6.9.3 メイジスキル追加版</title>
+<title>ミニアランド v0.6.15.24 平成MMO画面密度寄せ版</title>
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <div id="app">
-  <section id="titleScreen" class="screen active">
+  <section id="titleScreen" class="screen active heisei-title-screen">
     <div class="title-cloud c1"></div>
     <div class="title-cloud c2"></div>
     <div class="title-tree t1"></div>
     <div class="title-tree t2"></div>
     <div class="title-ground"></div>
-    <div class="title-panel">
-      <div class="logo">
-        <h1>ミニアランド</h1>
-        <p>ちいさな冒険者の見下ろしアクションRPG</p>
+
+    <div class="title-shell">
+      <div class="title-topbar">
+        <span>MINIALAND ONLINE</span>
+        <b>平成ブラウザMMO風</b>
       </div>
-      <div class="title-chars"><canvas id="titleCanvas"></canvas></div>
-      <div class="title-buttons">
-        <button id="newGameBtn" class="green">はじめる</button>
-        <button id="continueBtn" class="blue">つづきから</button>
-        <button id="titleResetBtn" class="red">セーブ初期化</button>
+
+      <div class="title-panel">
+        <div class="title-main-window">
+          <div class="title-tabs">
+            <span class="active">トップ</span>
+            <span>お知らせ</span>
+            <span>設定</span>
+          </div>
+
+          <div class="logo">
+            <small>2D ACTION RPG</small>
+            <h1>ミニアランド</h1>
+            <p>ちいさな冒険者の見下ろしアクションRPG</p>
+          </div>
+
+          <div class="title-chars"><canvas id="titleCanvas"></canvas></div>
+
+          <div class="title-info-board">
+            <div class="title-info-row"><b>冒険</b><span>はじまりの村から、ひだまり草原へ。</span></div>
+            <div class="title-info-row"><b>操作</b><span>縦画面 / 敵タップ攻撃 / 長押しフリックスキル</span></div>
+            <div class="title-info-row"><b>職業</b><span>ファイター・メイジ・プリーストほか</span></div>
+          </div>
+
+          <div class="title-buttons">
+            <button id="newGameBtn" class="green title-command"><b>はじめる</b><small>NEW GAME</small></button>
+            <button id="continueBtn" class="blue title-command"><b>つづきから</b><small>CONTINUE</small></button>
+            <button id="titleResetBtn" class="red title-command"><b>セーブ初期化</b><small>RESET</small></button>
+          </div>
+        </div>
+
+        <div class="title-news-window">
+          <div class="title-news-head">News <small>更新情報</small></div>
+          <div class="title-news-line"><b>v0.6.15.24</b><span>平成ブラウザMMO風のHUD密度へさらに調整。</span></div>
+          <div class="title-news-line"><b>HUD</b><span>縦画面戦闘UI、敵タップ攻撃、自動拾得に対応。</span></div>
+          <div class="title-news-line"><b>UI</b><span>職業・ステータス・装備・バッグ・施設を統一。</span></div>
+        </div>
+
+        <div class="version">v0.6.15.24 平成MMO画面密度寄せ版</div>
       </div>
-      <div class="version">v0.6.9.3 メイジスキル追加版</div>
     </div>
   </section>
 
   <section id="gameScreen" class="screen">
     <canvas id="gameCanvas"></canvas>
 
-    <div class="top-ui">
-      <div class="top-box lvbox">
-        <small>LV</small>
-        <b id="lvText">1</b>
+    <div class="top-ui choco-battle-hud">
+      <div class="mmo-room-bar"><b>ミニアランド</b><span id="roomNameText">フリー星1 エリア22 ルーム04</span></div>
+      <div class="hud-level">
+        <span class="hud-drop">◆</span>
+        <b>LV <i id="lvText">1</i></b>
       </div>
-      <div class="top-box statbox">
-        <div class="statline"><span>EXP</span><div class="meter"><i id="expFill"></i></div><span id="expText">0/30</span></div>
-        <div class="statline"><span>HP</span><div class="meter"><i id="hpFill"></i></div><span id="hpText">100/100</span></div>
-        <div class="statline"><span>SP</span><div class="meter"><i id="spFill"></i></div><span id="spText">50/50</span></div>
+      <div class="hud-bars">
+        <div class="hud-row exp-row"><span>EXP</span><div class="meter"><i id="expFill"></i></div><em id="expText">0/30</em></div>
+        <div class="hud-row hp-row"><span>HP</span><div class="meter"><i id="hpFill"></i></div><em id="hpText">100/100</em></div>
+        <div class="hud-row sp-row"><span>SP</span><div class="meter"><i id="spFill"></i></div><em id="spText">50/50</em></div>
       </div>
-      <div class="top-box moneybox">
-        <div class="mapname" id="mapText">はじまりの村</div>
-        <div>G <span id="goldText">0</span></div>
+      <div class="hud-map">
+        <b id="mapText">はじまりの村</b>
+        <small>G <span id="goldText">0</span></small>
       </div>
     </div>
 
@@ -52,36 +86,41 @@
     <div id="jobHud" class="job-hud">職業：<span>ファイター</span></div>
     <div class="debug-note" id="debugNote">debug</div>
 
+    <div id="skillAimOverlay" class="skill-aim-overlay" aria-hidden="true">
+      <div class="skill-aim-ring"></div>
+      <div class="skill-aim-arrow"></div>
+      <div class="skill-aim-label">スキル方向</div>
+    </div>
+
     <div id="stick" class="stick">
       <div class="stick-base"></div>
       <div id="stickKnob" class="stick-knob"></div>
     </div>
 
-    <div class="attack-area">
-      <button id="pickupBtn" class="round-btn green">拾う</button>
-      <button id="skillRoundBtn" class="round-btn skill-round"><small>技</small><span>斬</span></button>
-      <button id="attackBtn" class="round-btn red">攻撃</button>
+    <div class="field-side-ui worldmap-side-ui">
+      <button id="menuBtn" class="field-side-btn blue">メニュー</button>
+      <button id="bagBtn" class="field-side-btn">バッグ</button>
+      <button id="mapBtn" class="field-side-btn map-open-btn green">マップ</button>
     </div>
 
-    <div class="bottom-ui">
-      <div class="mini-actions">
-        <button id="chatBtn" class="blue">チャット</button>
-        <button id="goVillageBtn">村へ</button>
-        <button id="goFieldBtn" class="green">草原へ</button>
+    <div class="bottom-ui bottom-battle-ui">
+      <div class="mmo-chat-strip">
+        <button type="button">Group</button>
+        <button type="button">Target</button>
+        <button type="button">Chat</button>
+        <span>All</span>
+        <span>Room</span>
+        <span>System</span>
+        <i>チャット対象: ルーム内 / 全員</i>
       </div>
-      <div class="right-actions">
-        <button id="bagBtn">バッグ</button>
-        <button id="menuBtn" class="blue">メニュー</button>
-      </div>
-      <div class="shortcut-row">
-        <div class="slot"><small>1</small>薬</div>
-        <button id="skillBtn" class="slot skill-slot" type="button"><small>2</small><span id="skillSlotText">斬</span></button>
-        <div class="slot"><small>3</small>魔</div>
-        <div class="slot"><small>4</small>拾</div>
-        <div class="slot"><small>5</small>-</div>
-        <div class="slot"><small>6</small>-</div>
-        <div class="slot"><small>7</small>-</div>
-        <div class="slot"><small>8</small>-</div>
+      <div class="battle-hotbar">
+        <button id="chatBtn" class="slot-btn utility-slot"><small>CHAT</small><span>チャ</span></button>
+        <button id="interactBtn" class="slot-btn utility-slot"><small>TALK</small><span>話</span></button>
+        <button id="sitBtn" class="slot-btn utility-slot"><small>REST</small><span>座</span></button>
+        <button id="skillRoundBtn" class="slot-btn skill-slot"><small>SP</small><span>斬</span></button>
+        <button id="herbRoundBtn" class="slot-btn herb-slot"><small>ITEM</small><span id="herbRoundCount">3</span></button>
+        <div class="slot-btn empty-slot"><small>--</small><span></span></div>
+        <div class="slot-btn empty-slot"><small>--</small><span></span></div>
       </div>
     </div>
 
@@ -95,22 +134,113 @@
       </div>
     </div>
 
-    <div id="menuOverlay" class="panel-overlay">
+        <div id="worldMapOverlay" class="panel-overlay worldmap-overlay">
+      <div class="wood-panel worldmap-panel">
+        <div class="panel-head worldmap-head">
+          <h2>World Map <small>ワールドマップ</small></h2>
+          <button class="close-btn" data-close="worldMapOverlay">閉じる</button>
+        </div>
+
+        <div class="worldmap-window">
+          <div class="worldmap-top-summary">
+            <div class="worldmap-logo-box"><b>MINIALAND</b><span>WORLD MAP</span></div>
+            <div class="worldmap-current-box"><b>現在地</b><span id="worldMapCurrentText">はじまりの村</span></div>
+            <div class="worldmap-guide-box"><b>移動</b><span>行きたい地域をタップ</span></div>
+          </div>
+
+          <div class="worldmap-board">
+            <img class="worldmap-base-image" src="assets/worldmap/world_bg.png" alt="world map" />
+            <div class="world-area-level">★★★ エリアレベル</div>
+            <img class="world-player-pin" src="assets/worldmap/player_pin.png" alt="current" aria-hidden="true" />
+
+            <button class="world-node node-village" data-area-id="village" data-map-target="village">
+              <img class="world-node-icon" src="assets/worldmap/node_village.png" alt="はじまりの村" />
+              <span class="node-plate"><em>HOME</em><b>はじまりの村</b><small>ウエステ村</small><i>★★★★★</i></span>
+            </button>
+            <button class="world-node node-field" data-area-id="field" data-map-target="field">
+              <img class="world-node-icon" src="assets/worldmap/node_field.png" alt="ひだまり草原" />
+              <span class="node-plate"><em>FIELD</em><b>ひだまり草原</b><small>ナゴム草原</small><i>★★☆☆☆</i></span>
+            </button>
+            <button class="world-node locked node-cave" data-area-id="cave" data-map-target="cave">
+              <img class="world-node-icon" src="assets/worldmap/node_cave.png" alt="こけの洞窟" />
+              <span class="node-plate"><em>CAVE</em><b>こけの洞窟</b><small>ガッハルナ</small><i>★★★☆☆</i></span>
+            </button>
+            <button class="world-node locked node-forest" data-area-id="forest" data-map-lock="true">
+              <img class="world-node-icon" src="assets/worldmap/node_forest.png" alt="精霊の森" />
+              <span class="node-plate"><em>FOREST</em><b>精霊の森</b><small>ポドーネ</small><i>★★★☆☆</i></span>
+            </button>
+            <button class="world-node locked node-tower" data-area-id="tower" data-map-lock="true">
+              <img class="world-node-icon" src="assets/worldmap/node_tower.png" alt="死の塔" />
+              <span class="node-plate"><em>TOWER</em><b>死の塔</b><small>レイコール</small><i>★★★★☆</i></span>
+            </button>
+            <button class="world-node locked node-castle" data-area-id="castle" data-map-lock="true">
+              <img class="world-node-icon" src="assets/worldmap/node_castle.png" alt="光の城" />
+              <span class="node-plate"><em>HOLY</em><b>光の城</b><small>エルシオン</small><i>★★★★☆</i></span>
+            </button>
+            <button class="world-node locked node-ruins" data-area-id="ruins" data-map-lock="true">
+              <img class="world-node-icon" src="assets/worldmap/node_ruins.png" alt="原始の谷" />
+              <span class="node-plate"><em>RUINS</em><b>原始の谷</b><small>ブランガ</small><i>★★★☆☆</i></span>
+            </button>
+          </div>
+
+          <div id="worldMapDetail" class="worldmap-detail-panel">
+            <div class="world-detail-empty">
+              <b>エリアを選択してください</b>
+              <span>マップ上のエリア札をタップすると、推奨Lv・出現モンスター・ドロップ素材を確認できます。</span>
+            </div>
+          </div>
+
+          <div class="worldmap-bottom-note">
+            <div class="worldmap-note-row"><b>開放中</b><span id="worldMapUnlockedText">2 / 7 エリア</span></div>
+            <div class="worldmap-note-row"><b>案内</b><span>未開放エリアは今後追加予定です。</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+<div id="menuOverlay" class="panel-overlay menu-facility-overlay">
       <div class="wood-panel">
         <div class="panel-head">
-          <h2>メニュー</h2>
+          <h2>Menu <small>メニュー</small></h2>
           <button class="close-btn" data-close="menuOverlay">閉じる</button>
         </div>
-        <div class="menu-grid">
-          <div class="menu-card"><b>キャラ</b><p id="charInfo">Lv1 / ファイター</p></div>
-          <div class="menu-card"><b>装備</b><p id="equipInfo">旅人の服 / 木の剣 Lv1</p></div>
-          <div class="menu-card"><b>職業</b><p id="jobInfo">転職の館で変更できます</p></div>
-          <div class="menu-card"><b>クエスト</b><p id="questInfo">掲示板で受注できます</p></div>
-        </div>
-        <div style="margin-top:10px;display:grid;gap:8px;">
-          <button id="openEquipBtn" class="green">装備を開く</button>
-          <button id="saveBtn" class="green">セーブする</button>
-          <button id="menuResetBtn" class="red">セーブ初期化</button>
+
+        <div class="menu-window">
+          <div class="menu-tabs">
+            <span class="active">メイン</span>
+            <span>キャラ</span>
+            <span>管理</span>
+          </div>
+
+          <div class="menu-top-summary">
+            <div class="menu-avatar"><img src="assets/characters/player_front.png" alt="player" /></div>
+            <div class="menu-player-lines">
+              <b>ミニ冒険者</b>
+              <p id="charInfo">Lv1 / ファイター</p>
+            </div>
+            <div class="menu-gold-box"><b>GOLD</b><span id="menuGoldLabel">0</span></div>
+          </div>
+
+          <div class="menu-info-board">
+            <div class="menu-info-row wide"><b>装備</b><span id="equipInfo">旅人の服 / 木の剣 Lv1</span></div>
+            <div class="menu-info-row"><b>職業</b><span id="jobInfo">転職の館で変更できます</span></div>
+            <div class="menu-info-row"><b>育成</b><span id="statusInfo">POW/INT/SPD/VIT/LUK</span></div>
+            <div class="menu-info-row wide"><b>クエスト</b><span id="questInfo">掲示板で受注できます</span></div>
+          </div>
+
+          <div class="menu-button-board">
+            <button id="openStatusBtn" class="menu-command primary"><b>ステータス</b><small>能力・振り分け</small></button>
+            <button id="openEquipBtn" class="menu-command primary"><b>装備</b><small>武器・防具</small></button>
+            <button id="menuOpenBagBtn" class="menu-command"><b>バッグ</b><small>素材・消費</small></button>
+            <button id="menuOpenJobBtn" class="menu-command"><b>職業</b><small>転職の館</small></button>
+            <button id="menuOpenQuestBtn" class="menu-command"><b>クエスト</b><small>掲示板</small></button>
+            <button id="openTestBtn" class="menu-command blue"><b>テスト</b><small id="testInfo">調整用ツール</small></button>
+          </div>
+
+          <div class="menu-system-board">
+            <button id="saveBtn" class="green">セーブする</button>
+            <button id="menuResetBtn" class="red">セーブ初期化</button>
+          </div>
         </div>
       </div>
     </div>
@@ -126,10 +256,22 @@
     </div>
 
     <div id="dialogueBox" class="dialogue-box">
-      <div class="dialogue-name" id="dialogueName">村人</div>
-      <div class="dialogue-text" id="dialogueText">こんにちは！</div>
+      <div class="dialogue-window-head">
+        <div class="dialogue-nameplate">
+          <span class="dialogue-face" id="dialogueFace">村</span>
+          <div>
+            <div class="dialogue-name" id="dialogueName">村人</div>
+            <small>Talk / 会話</small>
+          </div>
+        </div>
+        <div class="dialogue-corner-label">Mini Chat</div>
+      </div>
+      <div class="dialogue-body">
+        <div class="dialogue-text" id="dialogueText">こんにちは！</div>
+      </div>
       <div class="dialogue-actions">
-        <button id="dialogueCloseBtn" class="blue">閉じる</button>
+        <span class="dialogue-hint">拾う/Eキーで会話・施設確認</span>
+        <button id="dialogueCloseBtn" class="blue">OK</button>
       </div>
     </div>
   </section>

@@ -1,4 +1,4 @@
-// ミニアランド v0.6.9.3 メイジスキル追加版
+// ミニアランド v0.6.15.7 平成ブラウザMMO装備UI版
 // v0.5.7 の安定版をベースに、CSS / JS / 画像素材を外部ファイル化。
 // 既存の移動・戦闘・装備・クエスト処理は維持。
 
@@ -79,6 +79,11 @@
       allowedJobs:["sword_kaiser"], atk:16, hp:6, sp:0, speed:-4,
       desc:"将来の上位職ソードカイザー向けに温存している巨大な大剣。今は開発者モードで見た目確認できます。"
     },
+    healing_staff: {
+      id:"healing_staff", name:"いやしの杖", icon:"✨", slot:"weapon",
+      allowedJobs:["priest"], atk:4, hp:4, sp:24, speed:0,
+      desc:"回復力を高める小さな杖。プリースト専用。"
+    },
     cloth_cap: {
       id:"cloth_cap", name:"布の帽子", icon:"🧢", slot:"head",
       atk:0, hp:5, sp:3, speed:0,
@@ -109,6 +114,11 @@
       allowedJobs:["mage"], atk:1, hp:4, sp:22, speed:0,
       desc:"魔法職向けの軽いローブ。メイジ専用。"
     },
+    priest_robe: {
+      id:"priest_robe", name:"白のローブ", icon:"🤍", slot:"body",
+      allowedJobs:["priest"], atk:0, hp:16, sp:18, speed:0,
+      desc:"回復職向けの白いローブ。プリースト専用。"
+    },
     thief_clothes: {
       id:"thief_clothes", name:"盗賊の軽装", icon:"🟢", slot:"body",
       allowedJobs:["thief"], atk:1, hp:8, sp:4, speed:9,
@@ -137,11 +147,13 @@
     thief_dagger: { gold:60, materials:{ puru_jelly:3 } },
     moco_blade: { gold:160, materials:{ moco_fur:5, moco_horn_piece:1 } },
     mushroom_staff: { gold:80, materials:{ mushroom_grass:5, red_cap:1 } },
+    healing_staff: { gold:75, materials:{ puru_jelly:3, mushroom_grass:3 } },
     puru_dagger: { gold:60, materials:{ puru_jelly:5, puru_core:1 } },
     mage_hat: { gold:45, materials:{ mushroom_grass:2 } },
     thief_hood: { gold:45, materials:{ puru_jelly:2, moco_fur:1 } },
     soldier_armor: { gold:90, materials:{ moco_fur:3 } },
     apprentice_robe: { gold:70, materials:{ mushroom_grass:3 } },
+    priest_robe: { gold:70, materials:{ puru_jelly:2, mushroom_grass:2 } },
     thief_clothes: { gold:70, materials:{ puru_jelly:2, moco_fur:2 } },
     small_shield: { gold:50, materials:{ moco_fur:1 } },
     novice_cape: { gold:50, materials:{ puru_jelly:1, mushroom_grass:1 } },
@@ -161,6 +173,7 @@
              side:{ox:24,oy:1,h:67,rot:0,behind:false} } },
     apprentice_staff: { type:"staff",  shaft:"#6b4324", orb:"#8fe8ff", core:"#fff8df", len:40 },
     mushroom_staff:   { type:"staff",  shaft:"#6b4324", orb:"#e87062", core:"#fff4c7", len:43 },
+    healing_staff:    { type:"staff",  shaft:"#725033", orb:"#fff6c8", core:"#8fe8ff", len:41 },
     thief_dagger:     { type:"dagger", blade:"#dfe7ef", edge:"#f8fbff", grip:"#6b4324", guard:"#6b4324", len:22, w:5 },
     puru_dagger:      { type:"dagger", blade:"#8fe8ff", edge:"#f8fbff", grip:"#356b7d", guard:"#6b4324", len:24, w:5 }
   };
@@ -311,6 +324,55 @@
     }
   };
 
+  // v0.6.15: 草原の半固定スポーンエリア。
+  // 完全ランダムではなく、敵ごとに出やすい地域を分ける。
+  const FIELD_TARGET_ENEMY_COUNT = 9;
+
+  const FIELD_SPAWN_ZONES = [
+    {
+      id:"south_puru", name:"入口草地", weight:50,
+      x:[105,1175], y:[690,930],
+      ids:["puru_slime","puru_slime","puru_slime","puru_slime","puru_slime","kinokko"]
+    },
+    {
+      id:"mid_kinokko", name:"中央きのこ道", weight:38,
+      x:[120,1160], y:[365,725],
+      ids:["puru_slime","kinokko","kinokko","kinokko","kinokko"]
+    },
+    {
+      id:"north_moco", name:"北の奥地", weight:12,
+      x:[130,1150], y:[110,385],
+      ids:["kinokko","kinokko","moco_horn"]
+    }
+  ];
+
+  function countEnemies(id){
+    return game.enemies.filter(e => e.id === id).length;
+  }
+
+  function weightedSpawnZone(){
+    const total = FIELD_SPAWN_ZONES.reduce((sum,z)=>sum + z.weight, 0);
+    let roll = rand(0,total);
+    for(const zone of FIELD_SPAWN_ZONES){
+      roll -= zone.weight;
+      if(roll <= 0) return zone;
+    }
+    return FIELD_SPAWN_ZONES[0];
+  }
+
+  function chooseSpawnId(zone){
+    let ids = [...zone.ids];
+
+    // モコホーンは序盤強敵枠なので同時に最大1体まで。
+    // 1体いる間は候補から外し、倒されたらまた候補に戻る。
+    if(countEnemies("moco_horn") >= 1){
+      ids = ids.filter(id => id !== "moco_horn");
+    }
+
+    if(ids.length === 0) ids = ["puru_slime"];
+    return ids[Math.floor(Math.random()*ids.length)];
+  }
+
   const JOBS = {
     fighter: {
       id:"fighter", name:"ファイター", icon:"⚔", type:"近接安定型",
@@ -320,7 +382,7 @@
       skillDesc:"前方を大きく斬り払うファイター専用スキル。通常攻撃より高威力で、近くの敵をまとめて攻撃できる。",
       summary:"剣で戦う序盤安定職。HP・攻撃・防御が高く、近距離戦に強い。",
       attackName:"剣撃",
-      tip:"近づいて正面を向いて攻撃。専用スキル「スラッシュ」はショートカット2で発動。"
+      tip:"近づいて正面を向いて攻撃。専用スキル「スラッシュ」は技ボタンで発動。"
     },
     mage: {
       id:"mage", name:"メイジ", icon:"✦", type:"魔法型",
@@ -330,7 +392,7 @@
       skillDesc:"正面方向へ火の弾を放つメイジ専用スキル。遠くの単体へ高威力で攻撃できる。",
       summary:"SPを使って遠距離魔法を撃つ火力型。最大SPが高い。",
       attackName:"魔法弾",
-      tip:"正面方向へ遠距離攻撃。専用スキル「ファイアボルト」はショートカット2で発動。"
+      tip:"正面方向へ遠距離攻撃。専用スキル「ファイアボルト」は技ボタンで発動。"
     },
     thief: {
       id:"thief", name:"シーフ", icon:"🗡", type:"速度型",
@@ -341,47 +403,151 @@
       summary:"短剣で素早く戦う高速型。移動速度と攻撃間隔が速い。",
       attackName:"連続短剣",
       tip:"射程は短いが攻撃間隔が短く、移動速度も速い。"
+    },
+    priest: {
+      id:"priest", name:"プリースト", icon:"✚", type:"回復支援型",
+      hpRate:1.05, spRate:1.28, atkRate:.82, defRate:1.06, speedRate:.98,
+      cooldown:.66, range:132, cost:5,
+      skillName:"ヒール", skillCost:12, skillCooldown:3.0,
+      skillDesc:"自分のHPを回復するプリースト専用スキル。INTで回復量、VITで安定感が伸びる。",
+      summary:"回復と耐久に優れた支援職。ソロでも粘り強く戦える。",
+      attackName:"ライトショット",
+      tip:"遠距離の光弾で戦い、危なくなったらヒールで立て直す。"
     }
   };
 
   const FUTURE_JOB_NAMES = {
-    sword_kaiser:"ソードカイザー"
+    pet_raiser:"ペットライザー",
+    samurai:"サムライ",
+    sorcerer:"ソーサラー",
+    holy_knight:"ホーリーナイト",
+    ninja:"ニンジャ",
+    ranger:"レンジャー",
+    sword_kaiser:"ソードカイザー",
+    grand_magia:"グランマギアー",
+    shield_saber:"シルドセイバー",
+    avengista:"アベンジスタ",
+    dual_star:"デュアルスター",
+    aramikagura:"アラミカグラ",
+    alvride:"アルヴライド",
+    nirvadio:"ニルバディオ",
+    noxtia:"ノクスティア",
+    alterie:"オルタリエ"
   };
+
+  const JOB_TREE_TIERS = [
+    {
+      tier:1, label:"1次職", className:"tier1",
+      jobs:[
+        {id:"fighter", icon:"⚔", role:"近接", req:"初期", implemented:true},
+        {id:"mage", icon:"✦", role:"魔法", req:"初期", implemented:true},
+        {id:"priest", icon:"✚", role:"回復", req:"初期", implemented:true},
+        {id:"thief", icon:"🗡", role:"速度", req:"初期", implemented:true},
+        {id:"pet_raiser", icon:"🐾", role:"ペット", req:"未実装", implemented:false}
+      ]
+    },
+    {
+      tier:2, label:"2次職", className:"tier2",
+      jobs:[
+        {id:"samurai", icon:"刀", role:"斬撃", req:"ファイターLv50 + シーフLv30", implemented:false},
+        {id:"sorcerer", icon:"魔", role:"高火力", req:"メイジLv50 + プリーストLv30", implemented:false},
+        {id:"holy_knight", icon:"聖", role:"防御支援", req:"ファイターLv40 + プリーストLv40", implemented:false},
+        {id:"ninja", icon:"忍", role:"高速", req:"シーフLv50 + ファイターLv30", implemented:false},
+        {id:"ranger", icon:"弓", role:"探索", req:"シーフLv30 + ペットライザーLv40", implemented:false}
+      ]
+    },
+    {
+      tier:3, label:"3次職", className:"tier3",
+      jobs:[
+        {id:"sword_kaiser", icon:"剣", role:"剣王", req:"サムライ系", implemented:false},
+        {id:"grand_magia", icon:"大魔", role:"大魔法", req:"ソーサラー系", implemented:false},
+        {id:"shield_saber", icon:"盾", role:"守護剣", req:"ホーリーナイト系", implemented:false},
+        {id:"avengista", icon:"復", role:"反撃", req:"ニンジャ系", implemented:false},
+        {id:"dual_star", icon:"双", role:"二刀/星", req:"レンジャー系", implemented:false}
+      ]
+    },
+    {
+      tier:4, label:"4次職", className:"tier4",
+      jobs:[
+        {id:"aramikagura", icon:"神", role:"極剣", req:"4次職予定", implemented:false},
+        {id:"alvride", icon:"光", role:"聖騎", req:"4次職予定", implemented:false},
+        {id:"nirvadio", icon:"冥", role:"深淵", req:"4次職予定", implemented:false},
+        {id:"noxtia", icon:"夜", role:"影技", req:"4次職予定", implemented:false},
+        {id:"alterie", icon:"星", role:"万能", req:"4次職予定", implemented:false}
+      ]
+    }
+  ];
+
+  // v0.6.15: チョコットランド系に近い基礎ステータス。
+  // POW/INT/SPD/VIT/LUK は振るステ、ATK/MAT/DEF/MDF/MOV/CRI/RARE は最終ステ。
+  const STAT_KEYS = ["pow","int","spd","vit","luk"];
+  const STAT_META = {
+    pow:{ label:"POW", name:"ちから", desc:"物理攻撃。ATKとスラッシュ火力に影響。", rec:"ファイター/シーフ" },
+    int:{ label:"INT", name:"まほう", desc:"魔法攻撃、最大SP、MDFに影響。", rec:"メイジ/プリースト" },
+    spd:{ label:"SPD", name:"すばやさ", desc:"移動速度と通常攻撃CTに影響。", rec:"シーフ/快適狩り" },
+    vit:{ label:"VIT", name:"たいりょく", desc:"最大HPとDEFに影響。", rec:"ファイター/耐久" },
+    luk:{ label:"LUK", name:"うん", desc:"会心率とレアドロップ率に影響。", rec:"素材集め" }
+  };
+
+  function emptyStats(){
+    return { pow:0, int:0, spd:0, vit:0, luk:0 };
+  }
 
   const QUEST_DEFS = [
     {
-      id:"puru_hunt", title:"ぷるスライム退治", badge:"はじまりの依頼",
-      desc:"ひだまり草原でぷるスライムを3体倒す。まずは戦闘と拾う流れに慣れよう。",
+      id:"puru_hunt", title:"ぷるスライム退治", badge:"STEP 1 / 戦闘練習",
+      desc:"ひだまり草原でぷるスライムを3体倒す。まずは攻撃・技・拾うボタンに慣れよう。",
       type:"kill", targetId:"puru_slime", target:3,
-      reward:{ gold:50, items:{ herb:2 } },
+      reward:{ gold:45, items:{ herb:2 } },
       next:"jelly_collect"
     },
     {
-      id:"jelly_collect", title:"ぷるゼリー集め", badge:"素材集め",
-      desc:"ぷるスライムが落とすぷるゼリーを3個集める。拾うボタンで素材を回収しよう。",
-      type:"item", targetId:"puru_jelly", target:3,
-      reward:{ gold:40 },
+      id:"jelly_collect", title:"ぷるゼリー集め", badge:"STEP 2 / 素材集め",
+      desc:"ぷるスライムが落とすぷるゼリーを4個集める。ぷる素材は短剣やアクセ作成に使う。",
+      type:"item", targetId:"puru_jelly", target:4,
+      reward:{ gold:45, items:{ puru_jelly:1 } },
       next:"first_craft"
     },
     {
-      id:"first_craft", title:"はじめての装備作成", badge:"鍛冶屋",
+      id:"first_craft", title:"はじめての装備作成", badge:"STEP 3 / 鍛冶屋",
       desc:"鍛冶屋で装備を1つ作成する。素材とGを使って、狩りやすさを上げよう。",
       type:"craft", targetId:"any", target:1,
       reward:{ gold:80, items:{ herb:1 } },
+      next:"weapon_upgrade"
+    },
+    {
+      id:"weapon_upgrade", title:"武器を鍛える", badge:"STEP 4 / 強化",
+      desc:"鍛冶屋で武器強化を2回行う。Lvだけでなく装備強化も火力に直結する。",
+      type:"upgrade", targetId:"weapon", target:2,
+      reward:{ gold:70, items:{ mushroom_grass:1 } },
       next:"kinokko_hunt"
     },
     {
-      id:"kinokko_hunt", title:"キノっこ討伐", badge:"次の狩場",
-      desc:"少し手ごわいキノっこを3体倒す。装備更新後の力試しにちょうどいい相手。",
-      type:"kill", targetId:"kinokko", target:3,
-      reward:{ gold:90, items:{ mushroom_grass:2 } },
+      id:"kinokko_hunt", title:"キノっこ討伐", badge:"STEP 5 / 中間狩場",
+      desc:"少し手ごわいキノっこを5体倒す。Lv4〜8あたりの主な経験値源にする。",
+      type:"kill", targetId:"kinokko", target:5,
+      reward:{ gold:110, items:{ mushroom_grass:3 } },
+      next:"mushroom_material"
+    },
+    {
+      id:"mushroom_material", title:"きのこ草を集めよう", badge:"STEP 6 / 装備素材",
+      desc:"きのこ草を6個集める。メイジ装備や中盤手前の装備作成に使える。",
+      type:"item", targetId:"mushroom_grass", target:6,
+      reward:{ gold:95, items:{ herb:2 } },
+      next:"level_10_goal"
+    },
+    {
+      id:"level_10_goal", title:"Lv10を目指す", badge:"STEP 7 / 育成目標",
+      desc:"Lv10まで育てる。キノっこ狩り、装備作成、武器強化を回してモコホーンに備えよう。",
+      type:"level", targetId:"level", target:10,
+      reward:{ gold:150, items:{ moco_fur:1 } },
       next:"moco_challenge"
     },
     {
-      id:"moco_challenge", title:"モコホーンへの挑戦", badge:"Lv10推奨",
-      desc:"強敵モコホーンを1体倒す。Lv10前後、装備強化後の目標として挑もう。",
+      id:"moco_challenge", title:"モコホーンへの挑戦", badge:"STEP 8 / Lv10推奨",
+      desc:"強敵モコホーンを1体倒す。Lv10前後、装備強化後の最初の壁として挑もう。",
       type:"kill", targetId:"moco_horn", target:1,
-      reward:{ gold:180, items:{ moco_fur:2 } }
+      reward:{ gold:260, items:{ moco_fur:3, moco_horn_piece:1 } }
     }
   ];
 
@@ -394,17 +560,23 @@
     hp:100,
     sp:50,
     map:"village",
+    unlockedAreas:{ village:true, field:true, cave:false },
     inventory:{ herb:3 },
     ownedEquip:{ wood_sword:true, traveler_cloth:true, cloth_cap:true },
     equipment:{ weapon:"wood_sword", head:"cloth_cap", body:"traveler_cloth", shield:null, back:null, accessory:null },
     currentJob:"ファイター",
-    jobLevels:{ fighter:1, mage:1, thief:1 },
+    jobLevels:{ fighter:1, mage:1, thief:1, priest:1 },
     weaponLevel:1,
+    stats: emptyStats(),
+    statPoints:0,
     quests:{
       puru_hunt:{ status:"none", progress:0, target:3 },
-      jelly_collect:{ status:"locked", progress:0, target:3 },
+      jelly_collect:{ status:"locked", progress:0, target:4 },
       first_craft:{ status:"locked", progress:0, target:1 },
-      kinokko_hunt:{ status:"locked", progress:0, target:3 },
+      weapon_upgrade:{ status:"locked", progress:0, target:2 },
+      kinokko_hunt:{ status:"locked", progress:0, target:5 },
+      mushroom_material:{ status:"locked", progress:0, target:6 },
+      level_10_goal:{ status:"locked", progress:1, target:10 },
       moco_challenge:{ status:"locked", progress:0, target:1 }
     }
   };
@@ -427,6 +599,7 @@
     attackFx:[],
     attackCooldown:0,
     skillCooldown:0,
+    spawnTimer:0,
     shake:0,
     shakeX:0,
     shakeY:0,
@@ -435,6 +608,34 @@
   };
 
   const input = { x:0, y:0, id:null, active:false };
+  const GESTURE_LONG_PRESS_MS = 460;
+  const GESTURE_TAP_SLOP = 12;
+  const GESTURE_FLICK_MIN = 46;
+  const gesture = {
+    active:false,
+    aiming:false,
+    pointerId:null,
+    timer:null,
+    startX:0,
+    startY:0,
+    currentX:0,
+    currentY:0,
+    startWorld:null,
+    startEnemy:null,
+    startVillageObject:null,
+    tapCanceled:false,
+    blockedReason:"",
+    lastResult:"idle"
+  };
+  const inputDebug = {
+    visible:false,
+    state:"idle",
+    tap:"-",
+    longPress:"-",
+    flickDist:0,
+    flickAngle:0,
+    result:"idle"
+  };
   let raf = 0;
   let last = 0;
   let toastTimer = 0;
@@ -446,12 +647,23 @@
     merged.ownedEquip = { ...base.ownedEquip, ...(data?.ownedEquip || {}) };
     merged.equipment = { ...base.equipment, ...(data?.equipment || {}) };
     for(const id of Object.values(merged.equipment)){ if(id) merged.ownedEquip[id] = true; }
+    merged.unlockedAreas = { ...base.unlockedAreas, ...(data?.unlockedAreas || {}) };
+    merged.unlockedAreas.village = true;
+    merged.unlockedAreas.field = true;
     merged.jobLevels = { ...base.jobLevels, ...(data?.jobLevels || {}) };
+    merged.stats = { ...emptyStats(), ...(data?.stats || {}) };
+    for(const key of STAT_KEYS){
+      merged.stats[key] = Math.max(0, Math.floor(Number(merged.stats[key]) || 0));
+    }
+    const spent = STAT_KEYS.reduce((sum,key)=>sum + (merged.stats[key] || 0), 0);
+    const earned = Math.max(0, ((Number(merged.level) || 1) - 1) * 3);
+    merged.statPoints = Number.isFinite(data?.statPoints) ? Math.max(0, Math.floor(data.statPoints)) : Math.max(0, earned - spent);
     merged.quests = { ...base.quests, ...(data?.quests || {}) };
     for(const def of QUEST_DEFS){
       merged.quests[def.id] = { ...base.quests[def.id], ...(data?.quests?.[def.id] || {}) };
       merged.quests[def.id].target = def.target;
     }
+    if(merged.quests?.moco_challenge?.status === "cleared") merged.unlockedAreas.cave = true;
     if(!Number.isFinite(merged.weaponLevel)) merged.weaponLevel = 1;
     return merged;
   }
@@ -496,11 +708,60 @@
   }
 
   function closeTransientUi(){
-    for(const id of ["bagOverlay","menuOverlay","facilityOverlay"]){
+    for(const id of ["bagOverlay","menuOverlay","facilityOverlay","worldMapOverlay"]){
       const el = $(id);
       if(el) el.classList.remove("show");
     }
+    clearFacilityThemes();
     closeDialogue();
+  }
+
+  function clearFacilityThemes(){
+    const overlay = $("facilityOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("job-facility-overlay", "status-facility-overlay", "equip-facility-overlay", "quest-facility-overlay", "shop-facility-overlay", "smith-facility-overlay");
+  }
+
+  function setFacilityJobTheme(enabled){
+    const overlay = $("facilityOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("status-facility-overlay", "equip-facility-overlay", "quest-facility-overlay", "shop-facility-overlay", "smith-facility-overlay");
+    overlay.classList.toggle("job-facility-overlay", !!enabled);
+  }
+
+  function setFacilityStatusTheme(enabled){
+    const overlay = $("facilityOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("job-facility-overlay", "equip-facility-overlay", "quest-facility-overlay", "shop-facility-overlay", "smith-facility-overlay");
+    overlay.classList.toggle("status-facility-overlay", !!enabled);
+  }
+
+  function setFacilityEquipTheme(enabled){
+    const overlay = $("facilityOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("job-facility-overlay", "status-facility-overlay", "quest-facility-overlay", "shop-facility-overlay", "smith-facility-overlay");
+    overlay.classList.toggle("equip-facility-overlay", !!enabled);
+  }
+
+  function setFacilityQuestTheme(enabled){
+    const overlay = $("facilityOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("job-facility-overlay", "status-facility-overlay", "equip-facility-overlay", "shop-facility-overlay", "smith-facility-overlay");
+    overlay.classList.toggle("quest-facility-overlay", !!enabled);
+  }
+
+  function setFacilityShopTheme(enabled){
+    const overlay = $("facilityOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("job-facility-overlay", "status-facility-overlay", "equip-facility-overlay", "quest-facility-overlay", "smith-facility-overlay");
+    overlay.classList.toggle("shop-facility-overlay", !!enabled);
+  }
+
+  function setFacilitySmithTheme(enabled){
+    const overlay = $("facilityOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("job-facility-overlay", "status-facility-overlay", "equip-facility-overlay", "quest-facility-overlay", "shop-facility-overlay");
+    overlay.classList.toggle("smith-facility-overlay", !!enabled);
   }
 
   function resetRuntimeState(){
@@ -535,14 +796,54 @@
     if(!e?.allowedJobs?.length) return "共通";
     return e.allowedJobs.map(jobNameById).join(" / ");
   }
+
+  function jobDataById(id){
+    return JOBS[id] || {
+      id,
+      name:jobNameById(id),
+      icon:(JOB_TREE_TIERS.flatMap(t=>t.jobs).find(j=>j.id===id)?.icon || "？"),
+      type:"未実装",
+      summary:"今後実装予定の職業です。",
+      attackName:"未実装",
+      skillName:"未実装",
+      skillCost:0,
+      skillCooldown:0,
+      range:0,
+      cooldown:0,
+      cost:0
+    };
+  }
+
+  function jobLevelText(id){
+    if(JOBS[id]) return `Lv${save.jobLevels?.[id] || 1}`;
+    return "Lv--";
+  }
+
+  function jobUnlockState(entry){
+    if(JOBS[entry.id]) return "selectable";
+    return "future";
+  }
+
+  function jobStateLabel(entry){
+    const state = jobUnlockState(entry);
+    if(state === "selectable") return save.currentJob === jobDataById(entry.id).name ? "現在" : "転職可";
+    if(entry.id === "pet_raiser") return "未実装";
+    return "未解放";
+  }
+
+  function jobRequirementText(entry){
+    if(JOBS[entry.id]) return entry.req || "選択可能";
+    return entry.req || "未実装";
+  }
   function canEquipForCurrentJob(e){
     if(game.devEquipmentPreview && e?.id === "flame_greatsword") return true;
     if(!e?.allowedJobs?.length) return true;
     return e.allowedJobs.includes(currentJob().id);
   }
   function fallbackEquipmentForCurrentJob(){
+    const jobId = currentJob().id;
     return {
-      weapon: currentJob().id === "fighter" ? "wood_sword" : null,
+      weapon: jobId === "fighter" ? "wood_sword" : null,
       body:"traveler_cloth",
       head:"cloth_cap"
     };
@@ -573,22 +874,96 @@
     }
     return result;
   }
-  function maxHp(){
+  function statSpent(){
+    save.stats = { ...emptyStats(), ...(save.stats || {}) };
+    return STAT_KEYS.reduce((sum,key)=>sum + Math.max(0, Math.floor(save.stats[key] || 0)), 0);
+  }
+  function statEarned(){
+    return Math.max(0, (save.level - 1) * 3);
+  }
+  function availableStatPoints(){
+    save.statPoints = Math.max(0, Math.floor(Number(save.statPoints) || 0));
+    return save.statPoints;
+  }
+  function statValue(key){
+    save.stats = { ...emptyStats(), ...(save.stats || {}) };
+    // 表示上は基礎1 + 振った値。振りなしでもキャラに最低能力があるようにする。
+    return 1 + Math.max(0, Math.floor(save.stats[key] || 0));
+  }
+  function statSummaryText(){
+    return STAT_KEYS.map(k => `${STAT_META[k].label}${statValue(k)}`).join(" / ");
+  }
+  function equipDerivedStats(){
     const es = equipStats();
-    return Math.max(1, Math.round((100 + (save.level - 1) * 18) * currentJob().hpRate + es.hp));
+    return {
+      atk: es.atk || 0,
+      hp: es.hp || 0,
+      sp: es.sp || 0,
+      speed: es.speed || 0
+    };
+  }
+  function maxHp(){
+    const es = equipDerivedStats();
+    const vit = statValue("vit");
+    return Math.max(1, Math.round((100 + (save.level - 1) * 18 + vit * 8 + es.hp) * currentJob().hpRate));
   }
   function maxSp(){
-    const es = equipStats();
-    return Math.max(1, Math.round((50 + (save.level - 1) * 7) * currentJob().spRate + es.sp));
+    const es = equipDerivedStats();
+    const intv = statValue("int");
+    return Math.max(1, Math.round((50 + (save.level - 1) * 7 + intv * 5 + es.sp) * currentJob().spRate));
   }
   function atk(){
-    const es = equipStats();
-    // v0.6.6.4: 基礎値を下げ、レベル/武器強化の伸び幅を上げて「強化が効く」式に調整。
-    return Math.max(1, Math.round((8 + (save.level - 1) * 3 + (save.weaponLevel - 1) * 5 + es.atk) * currentJob().atkRate));
+    const es = equipDerivedStats();
+    const pow = statValue("pow");
+    // POWは基礎ATK。武器強化と装備補正を足して、最後に職業補正をかける。
+    return Math.max(1, Math.round((8 + (save.level - 1) * 3 + (save.weaponLevel - 1) * 5 + pow * 3 + es.atk) * currentJob().atkRate));
+  }
+  function mat(){
+    const es = equipDerivedStats();
+    const intv = statValue("int");
+    // MATはINT中心。杖系装備のATK/SP補正も少し魔法火力に寄与させる。
+    return Math.max(1, Math.round(6 + (save.level - 1) * 3 + intv * 3 + es.atk * .7 + es.sp * .45));
+  }
+  function def(){
+    const es = equipDerivedStats();
+    const vit = statValue("vit");
+    return Math.max(0, Math.round(3 + (save.level - 1) * 1.6 + vit * 2 + es.hp * .18));
+  }
+  function mdf(){
+    const es = equipDerivedStats();
+    const intv = statValue("int");
+    return Math.max(0, Math.round(3 + (save.level - 1) * 1.4 + intv * 3 + es.sp * .25));
   }
   function playerSpeed(){
-    const es = equipStats();
-    return Math.max(70, Math.round(118 * currentJob().speedRate + es.speed));
+    const es = equipDerivedStats();
+    const spd = statValue("spd");
+    return Math.max(70, Math.round(118 * currentJob().speedRate + es.speed + spd));
+  }
+  function attackCooldown(job=currentJob()){
+    const spd = statValue("spd");
+    const reduction = Math.min(.16, spd * .0035);
+    return Math.max(.18, (job.cooldown || .45) - reduction);
+  }
+  function critRate(){
+    const luk = statValue("luk");
+    return clamp(.03 + luk * .004, .03, .35);
+  }
+  function rareBonusRate(){
+    const luk = statValue("luk");
+    return clamp(luk * .002, 0, .25);
+  }
+  function derivedStatBlock(){
+    return {
+      HP:maxHp(), SP:maxSp(), ATK:atk(), MAT:mat(), DEF:def(), MDF:mdf(), MOV:playerSpeed(),
+      CRI:Math.round(critRate()*1000)/10,
+      RARE:Math.round(rareBonusRate()*1000)/10
+    };
+  }
+  function rollDamage(base){
+    if(Math.random() < critRate()){
+      return { dmg:Math.max(1, Math.round(base * 1.55)), crit:true };
+    }
+    return { dmg:Math.max(1, Math.round(base)), crit:false };
   }
 
   function skillReady(){
@@ -601,12 +976,13 @@
   }
 
   function hasJobSkill(job=currentJob()){
-    return job.id === "fighter" || job.id === "mage";
+    return job.id === "fighter" || job.id === "mage" || job.id === "priest";
   }
 
   function skillShortLabel(job=currentJob()){
     if(job.id === "fighter") return "斬";
     if(job.id === "mage") return "火";
+    if(job.id === "priest") return "癒";
     return "-";
   }
 
@@ -660,6 +1036,38 @@
     return { def:QUEST_DEFS[QUEST_DEFS.length - 1], q:quest(QUEST_DEFS[QUEST_DEFS.length - 1].id) };
   }
 
+  function loopStageInfo(){
+    const guide = currentGuideQuest();
+    const q = guide.q;
+    const pct = guide.def.target ? Math.round(clamp((q.progress || 0) / guide.def.target * 100, 0, 100)) : 0;
+    let action = "掲示板で依頼を受けて、草原で狩りと素材集めを進めよう。";
+
+    if(q.status === "locked") action = "前の依頼を報告すると解放されます。";
+    else if(q.status === "none") action = "まず掲示板でこの依頼を受注しましょう。";
+    else if(q.status === "complete") action = "達成済みです。掲示板で報告して次の目標へ進みましょう。";
+    else if(guide.def.id === "puru_hunt") action = "草原でぷるスライムを倒して、基本操作と戦闘に慣れましょう。";
+    else if(guide.def.id === "jelly_collect") action = "ぷるスライムを倒したら、落ちたぷるゼリーを拾いましょう。";
+    else if(guide.def.id === "first_craft") action = "鍛冶屋で作れそうな装備を1つ作りましょう。素材が足りなければ草原へ。";
+    else if(guide.def.id === "weapon_upgrade") action = "鍛冶屋で武器を強化しましょう。攻撃力が上がると狩り効率が良くなります。";
+    else if(guide.def.id === "kinokko_hunt") action = "キノっこ中心に狩りましょう。ぷるスライムより経験値効率が良い敵です。";
+    else if(guide.def.id === "mushroom_material") action = "キノっこを狩って、きのこ草を集めましょう。メイジ装備や杖作りにも使えます。";
+    else if(guide.def.id === "level_10_goal") action = "Lv10まではキノっこ狩り、装備作成、武器強化を回すのがおすすめです。";
+    else if(guide.def.id === "moco_challenge") action = "モコホーンは北奥に最大1体だけ湧くLv10推奨強敵。中央でキノっこ狩りをしてから挑みましょう。";
+
+    return { guide, pct, action };
+  }
+
+  function growthLoopSummary(){
+    const hasCrafted = Object.keys(save.ownedEquip || {}).filter(id => !["wood_sword","traveler_cloth","cloth_cap"].includes(id)).length;
+    const weaponLv = save.weaponLevel || 1;
+    const moco = quest("moco_challenge");
+    if(moco.status === "cleared") return "序盤の壁突破済み。ワールドマップからこけの洞窟へ行けます。";
+    if(save.level < 4) return "ぷるスライムで操作練習 → ぷるゼリー集め → 初装備作成。";
+    if(hasCrafted < 1 || weaponLv < 3) return "素材で装備を作り、武器をLv3以上に強化するのが次の軸です。";
+    if(save.level < 10) return "キノっこ狩りでLv10を目指し、モコホーン挑戦の準備を進めましょう。";
+    return "Lv10到達。モコホーンを倒して序盤の壁を越える段階です。";
+  }
+
   function rewardText(reward={}){
     const parts = [];
     if(reward.gold) parts.push(`${reward.gold}G`);
@@ -682,7 +1090,15 @@
       const q = quest(def.id);
       if(q.status !== "accepted" || def.type !== type) continue;
       if(def.targetId !== "any" && def.targetId !== targetId) continue;
-      q.progress = Math.min(def.target, q.progress + count);
+
+      const before = q.progress || 0;
+      if(type === "level"){
+        q.progress = Math.min(def.target, Math.max(q.progress || 0, count));
+      }else{
+        q.progress = Math.min(def.target, (q.progress || 0) + count);
+      }
+      if(q.progress === before && q.status !== "complete") continue;
+
       changed = true;
       if(q.progress >= def.target){
         q.status = "complete";
@@ -706,6 +1122,8 @@
       up++;
     }
     if(up > 0){
+      save.statPoints = (save.statPoints || 0) + up * 3;
+      updateQuestProgress("level", "level", save.level);
       const hpGain = 18 * up;
       const spGain = 7 * up;
       if(game.p){
@@ -722,6 +1140,685 @@
   function addItem(id, count=1){
     save.inventory[id] = (save.inventory[id] || 0) + count;
   }
+
+  function allocateStat(key){
+    if(!STAT_KEYS.includes(key)) return;
+    if(availableStatPoints() <= 0){
+      toast("ステータスポイントがありません");
+      return;
+    }
+    save.stats = { ...emptyStats(), ...(save.stats || {}) };
+    save.stats[key]++;
+    save.statPoints--;
+    refreshPlayerStatsKeepingRatio();
+    persist();
+    renderStatusScreen();
+    syncUI();
+    toast(`${STAT_META[key].label} +1`);
+  }
+
+  function resetStats(){
+    save.stats = emptyStats();
+    save.statPoints = statEarned();
+    refreshPlayerStatsKeepingRatio(true);
+    persist();
+    renderStatusScreen();
+    syncUI();
+    toast("ステータスを振り直しました");
+  }
+
+  function refreshPlayerStatsKeepingRatio(refill=false){
+    if(!game.p) return;
+    const hpRate = game.p.maxHp ? clamp(game.p.hp / game.p.maxHp, .05, 1) : 1;
+    const spRate = game.p.maxSp ? clamp(game.p.sp / game.p.maxSp, 0, 1) : 1;
+    game.p.maxHp = maxHp();
+    game.p.maxSp = maxSp();
+    game.p.hp = refill ? game.p.maxHp : Math.max(1, Math.round(game.p.maxHp * hpRate));
+    game.p.sp = refill ? game.p.maxSp : Math.round(game.p.maxSp * spRate);
+    game.p.speed = playerSpeed();
+  }
+
+  function statRecommendText(){
+    const job = currentJob().id;
+    if(job === "fighter") return "おすすめ：POWで火力、VITで耐久。モコホーン挑戦前はVITも有効。";
+    if(job === "mage") return "おすすめ：INTでファイアボルト火力とSP、VITで事故防止。";
+    if(job === "priest") return "おすすめ：INTでヒール回復量とSP、VITで耐久。ソロならVITも重要。";
+    if(job === "thief") return "おすすめ：SPDで手数、LUKで素材集め、POWで最低火力。";
+    return "おすすめ：職業に合わせて主力ステータスを伸ばしましょう。";
+  }
+
+
+  function renderStatusScreen(){
+    setFacilityStatusTheme(true);
+    $("facilityTitle").innerHTML = "Character <small>ステータス</small>";
+    const box = $("facilityContent");
+    const d = derivedStatBlock();
+    const hpNow = game.p ? Math.max(0, Math.round(game.p.hp)) : d.HP;
+    const spNow = game.p ? Math.max(0, Math.round(game.p.sp)) : d.SP;
+    const expNeed = Math.max(1, needExp());
+    const expPct = clamp((save.exp || 0) / expNeed * 100, 0, 100);
+    const hpPct = clamp(hpNow / Math.max(1, d.HP) * 100, 0, 100);
+    const spPct = clamp(spNow / Math.max(1, d.SP) * 100, 0, 100);
+    const job = currentJob();
+    const slotCols = [
+      [
+        { slot:"head", label:"頭" },
+        { slot:"back", label:"背" },
+        { slot:"body", label:"服" }
+      ],
+      [
+        { slot:"weapon", label:"武" },
+        { slot:"shield", label:"盾" },
+        { slot:"accessory", label:"飾" }
+      ]
+    ];
+    function slotCard(def){
+      const id = save.equipment?.[def.slot];
+      const equip = id ? EQUIPMENT[id] : null;
+      return `<button class="status-slot-card" data-slot="${def.slot}"><b>${def.label}</b><small>${equip ? equip.name : '未装備'}</small></button>`;
+    }
+    const summaryTop = [
+      {label:"HP", value:`${hpNow}/${d.HP}`},
+      {label:"SP", value:`${spNow}/${d.SP}`},
+      {label:"EXP", value:`${Math.round(expPct)}%`},
+      {label:"CRI", value:`${d.CRI}%`},
+      {label:"RARE", value:`+${d.RARE}%`}
+    ];
+    const summaryBottom = [
+      {label:"ATK", value:d.ATK},
+      {label:"MAT", value:d.MAT},
+      {label:"DEF", value:d.DEF},
+      {label:"MDF", value:d.MDF},
+      {label:"MOV", value:d.MOV}
+    ];
+    box.innerHTML = `
+      <div class="status-mmo-window">
+        <div class="status-mini-tabs">
+          <span class="status-mini-tab active">ステータス</span>
+          <span class="status-mini-tab">コーデ</span>
+          <span class="status-mini-tab">サブ</span>
+          <span class="status-mini-logo">マネキン</span>
+        </div>
+
+        <div class="status-mainbox">
+          <div class="status-page-title"><b>Character</b><span>冒険者情報を確認してください。</span></div>
+
+          <div class="status-main-grid">
+            <div class="status-leftbox">
+              <div class="status-equip-layout">
+                <div class="status-slot-column">
+                  ${slotCols[0].map(slotCard).join("")}
+                </div>
+                <div class="status-character-panel">
+                  <div class="status-character-frame"><img src="assets/characters/player_front.png" alt="player" /></div>
+                  <div class="status-character-name">${job.name}<small>Lv ${save.level} / ${job.type}</small></div>
+                  <div class="status-mini-actions-row">
+                    <button id="openEquipFromStatusBtn" class="green">装備</button>
+                    <button id="statusDetailToggleBtn" class="blue">ふりわけ</button>
+                  </div>
+                </div>
+                <div class="status-slot-column">
+                  ${slotCols[1].map(slotCard).join("")}
+                </div>
+              </div>
+            </div>
+
+            <div class="status-rightbox">
+              <div class="status-points-box">残りステータスポイント ${availableStatPoints()}pt</div>
+              <div class="status-stat-head"><span></span><span>キャラ</span><span>装備</span></div>
+              <div class="status-compact-rows">
+                ${STAT_KEYS.map(key => {
+                  const meta = STAT_META[key];
+                  return `<div class="status-compact-row"><b>${meta.label}</b><span>${statValue(key)}</span><span>0</span></div>`;
+                }).join("")}
+              </div>
+            </div>
+          </div>
+
+          <div class="status-summary-grid">
+            ${summaryTop.map(item => `<div class="status-summary-cell"><b>${item.label}</b><span>${item.value}</span></div>`).join("")}
+          </div>
+          <div class="status-summary-grid">
+            ${summaryBottom.map(item => `<div class="status-summary-cell"><b>${item.label}</b><span>${item.value}</span></div>`).join("")}
+          </div>
+
+          <div id="statusDetailPanel" class="status-detail-panel">
+            <div class="status-guide-line">参考画像寄せの見た目を優先しつつ、詳細なステ振りと最終能力は下で調整できます。</div>
+
+            <div class="status-current-summary">
+              <div class="status-profile-main">
+                <span class="status-face">${job.icon || "ST"}</span>
+                <div>
+                  <b>Lv.${save.level} / ${job.name}</b>
+                  <small>${job.type} / ${job.summary}</small>
+                </div>
+                <em>残り ${availableStatPoints()}pt</em>
+              </div>
+              <div class="status-meter-list">
+                <div class="status-meter-row"><span>EXP</span><i><b style="width:${expPct}%"></b></i><em>${save.exp || 0}/${expNeed}</em></div>
+                <div class="status-meter-row"><span>HP</span><i><b style="width:${hpPct}%"></b></i><em>${hpNow}/${d.HP}</em></div>
+                <div class="status-meter-row"><span>SP</span><i><b style="width:${spPct}%"></b></i><em>${spNow}/${d.SP}</em></div>
+              </div>
+              <div class="status-advice">${statRecommendText()}</div>
+            </div>
+
+            <div class="status-board">
+              <div class="status-section-title"><b>ステータス振り分け</b><span>LvUPごとに +3pt</span></div>
+              <div class="status-build-grid">
+                ${STAT_KEYS.map(key => {
+                  const meta = STAT_META[key];
+                  return `
+                    <div class="stat-build-row status-stat-${key}">
+                      <div class="status-stat-name">
+                        <b>${meta.label}</b>
+                        <span>${statValue(key)}</span>
+                      </div>
+                      <div class="status-stat-detail">
+                        <strong>${meta.name}</strong>
+                        <small>${meta.desc}<br>向き：${meta.rec}</small>
+                      </div>
+                      <button id="statPlus_${key}" class="green" ${availableStatPoints() <= 0 ? "disabled" : ""}>+1</button>
+                    </div>`;
+                }).join("")}
+              </div>
+            </div>
+
+            <div class="status-board">
+              <div class="status-section-title"><b>最終ステータス</b><span>装備・職業込み</span></div>
+              <div class="final-stat-grid">
+                <div><b>HP</b><span>${d.HP}</span></div><div><b>SP</b><span>${d.SP}</span></div>
+                <div><b>ATK</b><span>${d.ATK}</span></div><div><b>MAT</b><span>${d.MAT}</span></div>
+                <div><b>DEF</b><span>${d.DEF}</span></div><div><b>MDF</b><span>${d.MDF}</span></div>
+                <div><b>MOV</b><span>${d.MOV}</span></div><div><b>CRI</b><span>${d.CRI}%</span></div>
+                <div><b>RARE</b><span>+${d.RARE}%</span></div><div><b>未使用</b><span>${availableStatPoints()}pt</span></div>
+              </div>
+            </div>
+
+            <div class="status-note-box">
+              <b>振り直し</b>
+              <span>調整中は無料で振り直せます。将来的には振り直しアイテム制にできます。</span>
+              <button id="statResetBtn" class="red">リセット</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    setTimeout(()=>{
+      document.querySelectorAll('.status-slot-card[data-slot]').forEach(el => {
+        el.onclick = () => renderEquipmentScreen(el.dataset.slot || null);
+      });
+      const equipBtn = $("openEquipFromStatusBtn");
+      if(equipBtn) equipBtn.onclick = openEquipmentScreen;
+      const detailBtn = $("statusDetailToggleBtn");
+      const detailPanel = $("statusDetailPanel");
+      if(detailBtn && detailPanel){
+        detailBtn.onclick = () => {
+          detailPanel.classList.toggle('show');
+          detailBtn.textContent = detailPanel.classList.contains('show') ? 'とじる' : 'ふりわけ';
+        };
+      }
+      for(const key of STAT_KEYS){
+        const btn = $("statPlus_" + key);
+        if(btn) btn.onclick = () => allocateStat(key);
+      }
+      const reset = $("statResetBtn");
+      if(reset) reset.onclick = resetStats;
+    },0);
+    $("facilityOverlay").classList.add("show");
+  }
+
+
+  function openStatusScreen(){
+    const menu = $("menuOverlay");
+    const bag = $("bagOverlay");
+    if(menu) menu.classList.remove("show");
+    if(bag) bag.classList.remove("show");
+    renderStatusScreen();
+  }
+
+  function setTestLevel(level){
+    level = Math.max(1, Math.floor(Number(level) || 1));
+    save.level = level;
+    save.exp = 0;
+    save.statPoints = Math.max(0, statEarned() - statSpent());
+    updateQuestProgress("level", "level", save.level);
+    refreshPlayerStatsKeepingRatio(true);
+    persist();
+    syncUI();
+    renderTestPanel();
+    toast(`Lv${level}に設定しました`);
+  }
+
+  function addTestStatPoints(n=30){
+    save.statPoints = (save.statPoints || 0) + n;
+    persist();
+    syncUI();
+    renderTestPanel();
+    toast(`ステータスポイント +${n}`);
+  }
+
+  function addTestKit(){
+    save.gold += 500;
+    addItem("herb", 20);
+    addItem("puru_jelly", 20);
+    addItem("mushroom_grass", 20);
+    addItem("moco_fur", 10);
+    addItem("puru_core", 3);
+    addItem("red_cap", 3);
+    addItem("moco_horn_piece", 2);
+    persist();
+    syncUI();
+    renderTestPanel();
+    toast("テスト素材セットを追加しました");
+  }
+
+  function refillPlayer(){
+    if(game.p){
+      game.p.maxHp = maxHp();
+      game.p.maxSp = maxSp();
+      game.p.hp = game.p.maxHp;
+      game.p.sp = game.p.maxSp;
+      game.p.speed = playerSpeed();
+    }
+    syncUI();
+    renderTestPanel();
+    toast("HP/SPを全回復しました");
+  }
+
+  function clearFieldForTest(){
+    game.enemies = [];
+    game.drops = [];
+    game.texts = [];
+    game.particles = [];
+    game.attackFx = [];
+    game.attackCooldown = 0;
+    game.skillCooldown = 0;
+    syncUI();
+    renderTestPanel();
+    toast("敵とドロップを消しました");
+  }
+
+  function spawnTestEnemy(id){
+    if(game.map !== "field") switchMap("field");
+    const data = MONSTERS[id];
+    if(!data || !game.p) return;
+
+    if(id === "moco_horn"){
+      game.enemies = game.enemies.filter(e => e.id !== "moco_horn");
+    }
+
+    const angle = game.p.face || -Math.PI/2;
+    const dist = id === "moco_horn" ? 115 : 82;
+    const x = clamp(game.p.x + Math.cos(angle) * dist, 70, game.worldW - 70);
+    const y = clamp(game.p.y + Math.sin(angle) * dist, 90, game.worldH - 80);
+    const levelBonus = Math.max(0, save.level - 1);
+    const hpBonus = id === "moco_horn" ? 3 : id === "puru_slime" ? 4 : 5;
+    const hp = Math.round(data.hp + levelBonus * hpBonus);
+
+    game.enemies.push({
+      ...data,
+      zone:"test",
+      x,y,
+      hp,
+      maxHp: hp,
+      atk: Math.round((data.atk + levelBonus * (id === "moco_horn" ? .75 : 1.1)) * 10) / 10,
+      r:data.r,
+      hitCd:1.2,
+      hurt:0,
+      squash:0,
+      knockX:0,
+      knockY:0,
+      warned:false,
+      wander:0,
+      wanderTimer:999
+    });
+    syncUI();
+    renderTestPanel();
+    toast(`${data.name}を出しました`);
+  }
+
+  function applyStatPreset(type){
+    save.stats = emptyStats();
+    const points = Math.max(0, statEarned() + (save.statPoints || 0));
+    const set = (key, val) => { save.stats[key] = Math.max(0, Math.floor(val)); };
+
+    if(type === "fighterPow"){
+      set("pow", Math.floor(points * .70));
+      set("vit", Math.floor(points * .25));
+      set("spd", points - statSpent());
+    }else if(type === "fighterVit"){
+      set("vit", Math.floor(points * .62));
+      set("pow", Math.floor(points * .30));
+      set("luk", points - statSpent());
+    }else if(type === "mageInt"){
+      set("int", Math.floor(points * .78));
+      set("vit", Math.floor(points * .18));
+      set("luk", points - statSpent());
+    }else if(type === "priestHeal"){
+      set("int", Math.floor(points * .56));
+      set("vit", Math.floor(points * .34));
+      set("luk", points - statSpent());
+    }else if(type === "luckFarm"){
+      set("luk", Math.floor(points * .62));
+      set("spd", Math.floor(points * .22));
+      set("pow", points - statSpent());
+    }
+    save.statPoints = Math.max(0, points - statSpent());
+    refreshPlayerStatsKeepingRatio(true);
+    persist();
+    syncUI();
+    renderTestPanel();
+    toast("ステ振りプリセットを適用しました");
+  }
+
+  function expectedHitsAgainst(id){
+    const e = MONSTERS[id];
+    if(!e) return "-";
+    const lvBonus = Math.max(0, save.level - 1);
+    const hpBonus = id === "moco_horn" ? 3 : id === "puru_slime" ? 4 : 5;
+    const hp = Math.round(e.hp + lvBonus * hpBonus);
+    const normal = Math.max(1, Math.ceil(hp / Math.max(1, atk())));
+    const slashRate = id === "moco_horn" ? 1.38 : id === "kinokko" ? 1.75 : 2.18;
+    const slash = Math.max(1, Math.ceil(hp / Math.max(1, atk() * slashRate)));
+    const fireRate = id === "moco_horn" ? 1.45 : id === "kinokko" ? 1.75 : 2.05;
+    const fire = Math.max(1, Math.ceil(hp / Math.max(1, mat() * fireRate)));
+    return `HP${hp} / 通常${normal}発 / 斬${slash}発 / 火${fire}発`;
+  }
+
+  function renderTestPanel(){
+    setFacilityJobTheme(false);
+    $("facilityTitle").textContent = "テストツール";
+    const d = derivedStatBlock();
+    const box = $("facilityContent");
+    box.innerHTML = `
+      <div class="facility-row">
+        <div class="row-head"><b>テスト状態</b><span class="quest-badge">調整用</span></div>
+        <p>Lv${save.level} / ${currentJob().name} / G${save.gold} / 未使用pt ${availableStatPoints()}<br>
+        ${statSummaryText()}<br>
+        HP${d.HP} SP${d.SP} ATK${d.ATK} MAT${d.MAT} DEF${d.DEF} MDF${d.MDF} MOV${d.MOV} CRI${d.CRI}% RARE+${d.RARE}%</p>
+      </div>
+
+      <div class="facility-row">
+        <div class="row-head"><b>レベル/回復</b><span class="quest-badge">即時変更</span></div>
+        <div class="test-grid">
+          <button id="testLv1" class="blue">Lv1</button>
+          <button id="testLv5" class="blue">Lv5</button>
+          <button id="testLv10" class="blue">Lv10</button>
+          <button id="testLv15" class="blue">Lv15</button>
+          <button id="testAddPts" class="green">+30pt</button>
+          <button id="testRefill" class="green">全回復</button>
+        </div>
+      </div>
+
+      <div class="facility-row">
+        <div class="row-head"><b>ステ振りプリセット</b><span class="quest-badge">比較用</span></div>
+        <div class="test-grid">
+          <button id="presetFighterPow" class="green">ファイター火力</button>
+          <button id="presetFighterVit" class="green">ファイター耐久</button>
+          <button id="presetMageInt" class="green">メイジINT</button>
+          <button id="presetPriestHeal" class="green">プリースト回復</button>
+          <button id="presetLuckFarm" class="green">LUK素材</button>
+        </div>
+      </div>
+
+      <div class="facility-row">
+        <div class="row-head"><b>敵出現</b><span class="quest-badge">目の前に出す</span></div>
+        <div class="test-grid">
+          <button id="spawnPuru" class="blue">ぷる</button>
+          <button id="spawnKinokko" class="blue">キノっこ</button>
+          <button id="spawnMoco" class="red">モコ</button>
+          <button id="clearField" class="red">敵/ドロップ消去</button>
+        </div>
+        <p>目安：ぷる ${expectedHitsAgainst("puru_slime")}<br>
+        キノっこ ${expectedHitsAgainst("kinokko")}<br>
+        モコホーン ${expectedHitsAgainst("moco_horn")}</p>
+      </div>
+
+      <div class="facility-row">
+        <div class="row-head"><b>素材/初期化</b><span class="quest-badge">検証用</span></div>
+        <div class="test-grid">
+          <button id="testKit" class="green">素材セット</button>
+          <button id="runAutoTestsBtn" class="blue">自動テスト実行</button>
+          <button id="testOpenStatus" class="blue">ステ画面</button>
+          <button id="testResetSave" class="red">セーブ初期化</button>
+        </div>
+        <p>テストツールはセーブに反映されます。検証後は必要ならセーブ初期化してください。</p>
+      </div>`;
+    $("facilityOverlay").classList.add("show");
+    setTimeout(()=>{
+      $("testLv1").onclick = () => setTestLevel(1);
+      $("testLv5").onclick = () => setTestLevel(5);
+      $("testLv10").onclick = () => setTestLevel(10);
+      $("testLv15").onclick = () => setTestLevel(15);
+      $("testAddPts").onclick = () => addTestStatPoints(30);
+      $("testRefill").onclick = refillPlayer;
+      $("presetFighterPow").onclick = () => applyStatPreset("fighterPow");
+      $("presetFighterVit").onclick = () => applyStatPreset("fighterVit");
+      $("presetMageInt").onclick = () => applyStatPreset("mageInt");
+      $("presetPriestHeal").onclick = () => applyStatPreset("priestHeal");
+      $("presetLuckFarm").onclick = () => applyStatPreset("luckFarm");
+      $("spawnPuru").onclick = () => spawnTestEnemy("puru_slime");
+      $("spawnKinokko").onclick = () => spawnTestEnemy("kinokko");
+      $("spawnMoco").onclick = () => spawnTestEnemy("moco_horn");
+      $("clearField").onclick = clearFieldForTest;
+      $("testKit").onclick = addTestKit;
+      $("runAutoTestsBtn").onclick = runAutoTests;
+      $("testOpenStatus").onclick = renderStatusScreen;
+      $("testResetSave").onclick = confirmReset;
+    },0);
+  }
+
+  function openTestPanel(){
+    renderTestPanel();
+  }
+
+  function snapshotForAutoTest(){
+    return {
+      save: structuredClone(save),
+      game: {
+        map: game.map,
+        worldW: game.worldW,
+        worldH: game.worldH,
+        p: game.p ? structuredClone(game.p) : null,
+        enemies: structuredClone(game.enemies || []),
+        drops: structuredClone(game.drops || []),
+        texts: structuredClone(game.texts || []),
+        particles: structuredClone(game.particles || []),
+        attackFx: structuredClone(game.attackFx || []),
+        attackCooldown: game.attackCooldown || 0,
+        skillCooldown: game.skillCooldown || 0,
+        spawnTimer: game.spawnTimer || 0,
+        shake: game.shake || 0,
+        shakeX: game.shakeX || 0,
+        shakeY: game.shakeY || 0,
+        sit: !!game.sit,
+        god: !!game.god
+      }
+    };
+  }
+
+  function restoreFromAutoTestSnapshot(snap){
+    save = structuredClone(snap.save);
+    game.map = snap.game.map;
+    game.worldW = snap.game.worldW;
+    game.worldH = snap.game.worldH;
+    game.p = snap.game.p ? structuredClone(snap.game.p) : null;
+    game.enemies = structuredClone(snap.game.enemies || []);
+    game.drops = structuredClone(snap.game.drops || []);
+    game.texts = structuredClone(snap.game.texts || []);
+    game.particles = structuredClone(snap.game.particles || []);
+    game.attackFx = structuredClone(snap.game.attackFx || []);
+    game.attackCooldown = snap.game.attackCooldown || 0;
+    game.skillCooldown = snap.game.skillCooldown || 0;
+    game.spawnTimer = snap.game.spawnTimer || 0;
+    game.shake = snap.game.shake || 0;
+    game.shakeX = snap.game.shakeX || 0;
+    game.shakeY = snap.game.shakeY || 0;
+    game.sit = !!snap.game.sit;
+    game.god = !!snap.game.god;
+    persist();
+    syncUI();
+  }
+
+  function autoAssert(name, condition, detail=""){
+    return { name, ok:!!condition, detail };
+  }
+
+  function runAutoTests(){
+    const snap = snapshotForAutoTest();
+    const results = [];
+
+    try{
+      // テスト用の安全な初期化。実セーブは最後に復元する。
+      save = normalizeSave(structuredClone(baseSave));
+      game.map = "field";
+      game.worldW = 1280;
+      game.worldH = 980;
+      game.p = {
+        x:640,y:815,r:14,
+        hp:100, sp:50,
+        maxHp:maxHp(), maxSp:maxSp(),
+        face:-Math.PI/2,
+        spriteDir:"down",
+        walkTime:0,
+        moving:false,
+        speed:playerSpeed(),
+        inv:0,
+        attackTimer:0,
+        bob:0
+      };
+      game.enemies = [];
+      game.drops = [];
+      game.texts = [];
+      game.particles = [];
+      game.attackFx = [];
+      game.attackCooldown = 0;
+      game.skillCooldown = 0;
+      game.spawnTimer = 0;
+      game.shake = 0;
+      game.shakeX = 0;
+      game.shakeY = 0;
+
+      // 1. セーブ初期状態
+      results.push(autoAssert("初期Lvが1", save.level === 1, `Lv=${save.level}`));
+      results.push(autoAssert("初期ステータスが0", STAT_KEYS.every(k => (save.stats?.[k] || 0) === 0), JSON.stringify(save.stats)));
+      results.push(autoAssert("初期ステptが0", availableStatPoints() === 0, `pt=${availableStatPoints()}`));
+
+      // 2. Lvアップとステpt
+      addExp(9999);
+      results.push(autoAssert("Lvアップでステpt付与", availableStatPoints() > 0, `Lv=${save.level} pt=${availableStatPoints()}`));
+      const earned = statEarned();
+      results.push(autoAssert("獲得pt計算がLv連動", earned === (save.level - 1) * 3, `earned=${earned}`));
+
+      // 3. ステ振り効果
+      const atkBefore = atk();
+      const matBefore = mat();
+      const hpBefore = maxHp();
+      const rareBefore = rareBonusRate();
+      save.statPoints += 20;
+      allocateStat("pow");
+      allocateStat("int");
+      allocateStat("vit");
+      allocateStat("luk");
+      results.push(autoAssert("POWでATK上昇", atk() > atkBefore, `${atkBefore}→${atk()}`));
+      results.push(autoAssert("INTでMAT上昇", mat() > matBefore, `${matBefore}→${mat()}`));
+      results.push(autoAssert("VITでHP上昇", maxHp() > hpBefore, `${hpBefore}→${maxHp()}`));
+      results.push(autoAssert("LUKでRARE上昇", rareBonusRate() > rareBefore, `${rareBefore}→${rareBonusRate()}`));
+
+      // 4. スキル存在
+      save.currentJob = "ファイター";
+      results.push(autoAssert("ファイターにスキルあり", hasJobSkill(currentJob()), currentJob().name));
+      save.currentJob = "メイジ";
+      results.push(autoAssert("メイジにスキルあり", hasJobSkill(currentJob()), currentJob().name));
+      save.currentJob = "プリースト";
+      results.push(autoAssert("プリーストにスキルあり", hasJobSkill(currentJob()), currentJob().name));
+      const healEstimate = priestHealAmount();
+      results.push(autoAssert("ヒール回復量が正値", healEstimate > 0, `heal=${healEstimate}`));
+
+      // 5. MAT参照がファイアボルト計算に使える
+      const fireEstimate = Math.round(mat() * 1.75);
+      results.push(autoAssert("ファイアボルト火力計算がMAT基準", fireEstimate > 0, `MAT=${mat()} estimate=${fireEstimate}`));
+
+      // 6. モコホーン同時1体制限
+      game.enemies = [{ id:"moco_horn" }];
+      const northZone = FIELD_SPAWN_ZONES.find(z => z.id === "north_moco") || FIELD_SPAWN_ZONES[0];
+      let mocoChosen = false;
+      for(let i=0;i<25;i++){
+        if(chooseSpawnId(northZone) === "moco_horn") mocoChosen = true;
+      }
+      results.push(autoAssert("モコホーンがいる時は追加候補から除外", !mocoChosen, `chosenMoco=${mocoChosen}`));
+
+      // 7. スポーン補充
+      game.enemies = [];
+      maintainFieldSpawns(99);
+      results.push(autoAssert("敵補充が動作", game.enemies.length > 0, `enemies=${game.enemies.length}`));
+      results.push(autoAssert("敵数が目標を超えない", game.enemies.length <= FIELD_TARGET_ENEMY_COUNT, `enemies=${game.enemies.length} target=${FIELD_TARGET_ENEMY_COUNT}`));
+
+      // 8. レアドロップ率の上限
+      save.stats = { pow:0, int:0, spd:0, vit:0, luk:999 };
+      results.push(autoAssert("RARE補正が上限内", rareBonusRate() <= .25, `rare=${rareBonusRate()}`));
+      results.push(autoAssert("CRIが上限内", critRate() <= .35, `crit=${critRate()}`));
+
+      // 9. 装備専用判定の存在
+      results.push(autoAssert("炎の大剣データあり", !!EQUIPMENT.flame_greatsword, "flame_greatsword"));
+      results.push(autoAssert("炎の大剣画像lookあり", !!weaponLook("flame_greatsword")?.img, weaponLook("flame_greatsword")?.img || ""));
+
+      // 10. ワールドマップ / 洞窟解放
+      save = normalizeSave(structuredClone(baseSave));
+      results.push(autoAssert("初期状態では洞窟未開放", !isWorldAreaUnlocked(worldAreaById("cave")), `cave=${!!save.unlockedAreas?.cave}`));
+      results.push(autoAssert("未開放洞窟には出発不可", !canSwitchMap("cave"), `canCave=${canSwitchMap("cave")}`));
+      save.quests.moco_challenge.status = "cleared";
+      const unlockedNow = syncWorldUnlocks(false);
+      results.push(autoAssert("モコホーン報告済みで洞窟解放", isWorldAreaUnlocked(worldAreaById("cave")), `new=${unlockedNow} cave=${!!save.unlockedAreas?.cave}`));
+      const switched = switchMap("cave");
+      results.push(autoAssert("開放済み洞窟へ遷移可能", switched && save.map === "cave" && game.map === "cave", `save=${save.map} game=${game.map}`));
+      save.map = "field";
+      persist();
+      const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
+      results.push(autoAssert("マップ移動後の保存値が保持される", raw.map === "field", `raw.map=${raw.map}`));
+
+    }catch(err){
+      results.push({ name:"自動テスト実行中エラー", ok:false, detail:String(err && err.message ? err.message : err) });
+    }finally{
+      restoreFromAutoTestSnapshot(snap);
+    }
+
+    game.lastAutoTestResults = results;
+    renderAutoTestResults(results);
+    return results;
+  }
+
+  function renderAutoTestResults(results=game.lastAutoTestResults || []){
+    setFacilityJobTheme(false);
+    $("facilityTitle").textContent = "自動テスト";
+    const total = results.length;
+    const pass = results.filter(r => r.ok).length;
+    const fail = total - pass;
+    const box = $("facilityContent");
+    box.innerHTML = `
+      <div class="facility-row">
+        <div class="row-head"><b>自動テスト結果</b><span class="quest-badge">${pass}/${total} OK</span></div>
+        <p>セーブ/ステ振り/職業スキル/ヒール/敵湧き/モコホーン制限/レア率/装備/ワールドマップ解放を内部チェックします。</p>
+        <p class="loop-action">${fail === 0 ? "全テストOKです。" : `${fail}件NGがあります。詳細を確認してください。`}</p>
+        <button id="rerunAutoTestsBtn" class="green">もう一度実行</button>
+      </div>
+      <div class="auto-test-list">
+        ${results.map(r => `
+          <div class="auto-test-row ${r.ok ? "ok" : "ng"}">
+            <b>${r.ok ? "OK" : "NG"}：${r.name}</b>
+            <small>${r.detail || ""}</small>
+          </div>
+        `).join("")}
+      </div>`;
+    $("facilityOverlay").classList.add("show");
+    setTimeout(()=>{
+      const rerun = $("rerunAutoTestsBtn");
+      if(rerun) rerun.onclick = runAutoTests;
+    },0);
+  }
+
+
+
 
   function setAppHeight(){
     const h = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
@@ -762,24 +1859,32 @@
       resetSave();
       save = loadSave();
     }
+    syncWorldUnlocks(false);
+    const startMap = canSwitchMap(save.map || "village") ? (save.map || "village") : "village";
+    if(save.map !== startMap){
+      save.map = startMap;
+      persist();
+    }
     titleScreen.classList.remove("active");
     gameScreen.classList.add("active");
     resize();
-    initWorld(save.map || "village");
+    initWorld(startMap);
     game.running = true;
     last = performance.now();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(loop);
-    toast("v0.6.9 序盤クエスト導線を追加しました");
+    toast("ミニアランドへようこそ！");
   }
 
   function initWorld(mapName){
     game.map = mapName;
-    game.worldW = mapName === "village" ? 940 : 1080;
-    game.worldH = mapName === "village" ? 740 : 840;
+    game.worldW = mapName === "village" ? 940 : mapName === "cave" ? 980 : 1280;
+    game.worldH = mapName === "village" ? 740 : mapName === "cave" ? 780 : 980;
     const pStart = mapName === "village"
       ? {x:470,y:450}
-      : {x:540,y:610};
+      : mapName === "cave"
+        ? {x:490,y:650}
+        : {x:640,y:815};
     game.p = {
       x:pStart.x, y:pStart.y, r:14,
       hp: Math.min(save.hp || maxHp(), maxHp()),
@@ -801,22 +1906,276 @@
     game.attackFx = [];
     game.attackCooldown = 0;
     game.skillCooldown = 0;
+    game.spawnTimer = 0;
     game.shake = 0;
     game.shakeX = 0;
     game.shakeY = 0;
     game.sit = false;
     if(mapName === "field"){
-      for(let i=0;i<6;i++) spawnMonster();
+      for(let i=0;i<FIELD_TARGET_ENEMY_COUNT;i++) spawnMonster();
     }
     updateCamera();
     syncUI();
   }
 
+  function mapDisplayName(mapName){
+    if(mapName === "village") return "はじまりの村";
+    if(mapName === "field") return "ひだまり草原";
+    if(mapName === "cave") return "こけの洞窟";
+    return "ミニアランド";
+  }
+
   function switchMap(mapName){
-    persist();
+    if(!canSwitchMap(mapName)){
+      const area = worldAreaByMapTarget(mapName);
+      toast(area && !isWorldAreaUnlocked(area) ? `${area.name}はまだ開放されていません` : "このエリアにはまだ移動できません");
+      return false;
+    }
     save.map = mapName;
+    persist();
     initWorld(mapName);
-    toast(mapName === "village" ? "はじまりの村に戻りました" : "ひだまり草原へ出発！");
+    persist();
+    toast(mapName === "village" ? "はじまりの村に戻りました" : `${mapDisplayName(mapName)}へ出発！`);
+    const worldMapOverlay = $("worldMapOverlay");
+    if(worldMapOverlay) worldMapOverlay.classList.remove("show");
+    return true;
+  }
+
+  const WORLD_MAP_AREAS = [
+    {
+      id:"village",
+      mapTarget:"village",
+      name:"はじまりの村",
+      sub:"ウエステ村",
+      code:"HOME",
+      level:"Lv 1",
+      stars:"★☆☆☆☆",
+      unlocked:true,
+      icon:"assets/worldmap/node_village.png",
+      desc:"冒険の拠点。道具屋、鍛冶屋、転職の館、クエスト掲示板を利用できます。",
+      monsters:["なし"],
+      drops:["なし"],
+      condition:"最初から開放",
+      note:"HPが危ない時や準備を整えたい時はここに戻りましょう。"
+    },
+    {
+      id:"field",
+      mapTarget:"field",
+      name:"ひだまり草原",
+      sub:"ナゴム草原",
+      code:"FIELD",
+      level:"Lv 1〜8",
+      stars:"★★☆☆☆",
+      unlocked:true,
+      icon:"assets/worldmap/node_field.png",
+      desc:"序盤の狩場。ぷるスライムやキノっこを倒して、素材・G・EXPを集めます。",
+      monsters:["ぷるスライム","キノっこ","モコホーン"],
+      drops:["ぷるゼリー","ぷるコア","きのこ草","赤いカサ","モコ毛皮"],
+      condition:"最初から開放",
+      note:"敵をタップして通常攻撃。ドロップは近づくと自動で拾います。"
+    },
+    {
+      id:"cave",
+      mapTarget:"cave",
+      name:"こけの洞窟",
+      sub:"ガッハルナ",
+      code:"CAVE",
+      level:"Lv 8〜15",
+      stars:"★★★☆☆",
+      unlocked:false,
+      icon:"assets/worldmap/node_cave.png",
+      desc:"湿った岩場とコケに覆われた洞窟。中盤序盤の素材集め用エリア予定です。",
+      monsters:["ケイブスライム","コケバット","ロックぷる"],
+      drops:["こけ石","洞窟キノコ","小さな鉱石"],
+      condition:"草原クエスト『モコホーンへの挑戦』を報告すると開放",
+      note:"開放後は洞窟入口マップへ移動できます。本格的な洞窟モンスターは次版で追加予定です。"
+    },
+    {
+      id:"forest",
+      mapTarget:null,
+      name:"精霊の森",
+      sub:"ポドーネ",
+      code:"FOREST",
+      level:"Lv 12〜20",
+      stars:"★★★☆☆",
+      unlocked:false,
+      icon:"assets/worldmap/node_forest.png",
+      desc:"木々と精霊が暮らす森。メイジ・プリースト系素材が集まるエリア予定です。",
+      monsters:["リーフリン","つぼみラビ","森の精霊"],
+      drops:["若葉のしずく","精霊の枝","森の布"],
+      condition:"こけの洞窟到達後に開放予定",
+      note:"今後のエリア拡張用の予約枠です。"
+    },
+    {
+      id:"tower",
+      mapTarget:null,
+      name:"死の塔",
+      sub:"レイコール",
+      code:"TOWER",
+      level:"Lv 20〜35",
+      stars:"★★★★☆",
+      unlocked:false,
+      icon:"assets/worldmap/node_tower.png",
+      desc:"高難度の塔エリア。強敵・レア素材・上位職条件に絡める予定です。",
+      monsters:["ゴーストぷる","塔の番兵","影の魔導士"],
+      drops:["古びた紋章","黒鉄片","塔の鍵片"],
+      condition:"精霊の森クリア後に開放予定",
+      note:"まだ未実装です。"
+    },
+    {
+      id:"castle",
+      mapTarget:null,
+      name:"光の城",
+      sub:"エルシオン",
+      code:"HOLY",
+      level:"Lv 25〜40",
+      stars:"★★★★☆",
+      unlocked:false,
+      icon:"assets/worldmap/node_castle.png",
+      desc:"光属性の敵と聖なる素材が登場する城エリア予定です。",
+      monsters:["ホーリーぷる","城の守護者","光の騎士"],
+      drops:["聖なる布","光石","騎士の欠片"],
+      condition:"死の塔の一部クエスト達成後に開放予定",
+      note:"まだ未実装です。"
+    },
+    {
+      id:"ruins",
+      mapTarget:null,
+      name:"原始の谷",
+      sub:"ブランガ",
+      code:"RUINS",
+      level:"Lv 18〜30",
+      stars:"★★★☆☆",
+      unlocked:false,
+      icon:"assets/worldmap/node_ruins.png",
+      desc:"古代遺跡風の素材エリア。獣・岩・古代系モンスターを予定しています。",
+      monsters:["古代ぷる","石ガメ","谷の獣"],
+      drops:["古代石","硬い甲羅","谷の牙"],
+      condition:"草原〜洞窟進行後に開放予定",
+      note:"まだ未実装です。"
+    }
+  ];
+
+  let selectedWorldAreaId = "village";
+
+  function isCaveUnlockConditionMet(){
+    return quest("moco_challenge").status === "cleared";
+  }
+
+  function syncWorldUnlocks(showToast=false){
+    save.unlockedAreas = save.unlockedAreas || { village:true, field:true, cave:false };
+    save.unlockedAreas.village = true;
+    save.unlockedAreas.field = true;
+    let newlyUnlocked = false;
+    if(isCaveUnlockConditionMet() && !save.unlockedAreas.cave){
+      save.unlockedAreas.cave = true;
+      newlyUnlocked = true;
+      if(showToast) toast("こけの洞窟へ行けるようになりました！");
+    }
+    return newlyUnlocked;
+  }
+
+  function isWorldAreaUnlocked(area){
+    syncWorldUnlocks(false);
+    if(!area) return false;
+    if(area.id === "village" || area.id === "field") return true;
+    if(area.id === "cave") return !!save.unlockedAreas?.cave;
+    return !!area.unlocked;
+  }
+
+  function worldAreaById(id){
+    return WORLD_MAP_AREAS.find(a => a.id === id) || WORLD_MAP_AREAS[0];
+  }
+
+  function worldAreaByMapTarget(mapName){
+    return WORLD_MAP_AREAS.find(a => a.mapTarget === mapName) || null;
+  }
+
+  function canSwitchMap(mapName){
+    const area = worldAreaByMapTarget(mapName);
+    return !!(area && area.mapTarget && isWorldAreaUnlocked(area));
+  }
+
+  function currentWorldArea(){
+    return WORLD_MAP_AREAS.find(a => a.mapTarget === save.map) || WORLD_MAP_AREAS[0];
+  }
+
+  function refreshWorldMapUi(){
+    const current = currentWorldArea();
+    const currentText = $("worldMapCurrentText");
+    if(currentText) currentText.textContent = `${current.name} / ${current.sub}`;
+    syncWorldUnlocks(false);
+    const unlockedCount = WORLD_MAP_AREAS.filter(a => isWorldAreaUnlocked(a)).length;
+    const unlockedText = $("worldMapUnlockedText");
+    if(unlockedText) unlockedText.textContent = `${unlockedCount} / ${WORLD_MAP_AREAS.length} エリア`;
+    document.querySelectorAll(".world-node").forEach(node => {
+      const id = node.dataset.areaId || node.dataset.mapTarget || "";
+      const area = worldAreaById(id);
+      node.classList.remove("current", "locked", "selected");
+      if(!isWorldAreaUnlocked(area)) node.classList.add("locked");
+      if(area.mapTarget && area.mapTarget === save.map) node.classList.add("current");
+      if(id && id === selectedWorldAreaId) node.classList.add("selected");
+    });
+  }
+
+  function renderWorldMapDetail(areaId=selectedWorldAreaId){
+    const area = worldAreaById(areaId);
+    const isUnlocked = isWorldAreaUnlocked(area);
+    selectedWorldAreaId = area.id;
+    const detail = $("worldMapDetail");
+    if(!detail) return;
+
+    const monsters = area.monsters.map(v => `<span>${v}</span>`).join("");
+    const drops = area.drops.map(v => `<span>${v}</span>`).join("");
+    detail.innerHTML = `
+      <div class="world-detail-card ${isUnlocked ? "" : "locked"}">
+        <div class="world-detail-head">
+          <img src="${area.icon}" alt="${area.name}" />
+          <div>
+            <em>${area.code}</em>
+            <b>${area.name}</b>
+            <small>${area.sub} / 推奨 ${area.level}</small>
+          </div>
+          <i>${area.stars}</i>
+        </div>
+        <div class="world-detail-desc">${area.desc}</div>
+        <div class="world-detail-grid">
+          <div><b>出現</b><p>${monsters}</p></div>
+          <div><b>素材</b><p>${drops}</p></div>
+        </div>
+        <div class="world-detail-condition">
+          <b>${isUnlocked ? "開放中" : "未開放"}</b>
+          <span>${area.condition}${isUnlocked && area.mapTarget ? " / 下の出発ボタンで移動できます" : ""}</span>
+        </div>
+        <div class="world-detail-actions">
+          <small>${area.note}</small>
+          <button id="worldMapDepartBtn" class="${isUnlocked && area.mapTarget ? "green" : ""}" ${isUnlocked && area.mapTarget ? "" : "disabled"}>${isUnlocked && area.mapTarget ? "このエリアへ出発" : "まだ行けません"}</button>
+        </div>
+      </div>`;
+    const depart = $("worldMapDepartBtn");
+    if(depart){
+      depart.onclick = () => {
+        if(!isWorldAreaUnlocked(area) || !area.mapTarget){
+          toast("このエリアはまだ開放されていません");
+          return;
+        }
+        switchMap(area.mapTarget);
+      };
+    }
+    refreshWorldMapUi();
+  }
+
+  function selectWorldMapArea(areaId){
+    selectedWorldAreaId = areaId;
+    renderWorldMapDetail(areaId);
+  }
+
+  function openWorldMap(){
+    const current = currentWorldArea();
+    selectedWorldAreaId = current.id;
+    refreshWorldMapUi();
+    renderWorldMapDetail(selectedWorldAreaId);
+    $("worldMapOverlay").classList.add("show");
   }
 
   function rand(a,b){ return Math.random() * (b-a) + a; }
@@ -826,22 +2185,28 @@
   function screenY(y){ return Math.round(y - game.camY + (game.shakeY || 0)); }
 
   function spawnMonster(){
-    // 序盤はぷるスライム多め。ファイターの通常攻撃とスラッシュの差を試しやすくする。
-    const ids = ["puru_slime","puru_slime","puru_slime","puru_slime","puru_slime","kinokko","kinokko","kinokko","moco_horn"];
-    const id = ids[Math.floor(Math.random()*ids.length)];
+    const zone = weightedSpawnZone();
+    const id = chooseSpawnId(zone);
     const data = MONSTERS[id];
     let x=120,y=140;
-    for(let i=0;i<50;i++){
-      x = rand(80, game.worldW-80);
-      y = rand(110, game.worldH-100);
-      if(!game.p || Math.hypot(x-game.p.x, y-game.p.y) > 230) break;
+
+    for(let i=0;i<72;i++){
+      x = rand(zone.x[0], zone.x[1]);
+      y = rand(zone.y[0], zone.y[1]);
+
+      // プレイヤーの近くには湧きにくくする。
+      // モコホーンは通常敵より遠く、北の奥地側に寄せる。
+      const safeDist = id === "moco_horn" ? 330 : 220;
+      if(!game.p || Math.hypot(x-game.p.x, y-game.p.y) > safeDist) break;
     }
-    const scale = rand(.94,1.08);
+
+    const scale = id === "moco_horn" ? rand(1.02,1.13) : rand(.94,1.08);
     const levelBonus = Math.max(0, save.level - 1);
     const hpBonus = id === "moco_horn" ? 3 : id === "puru_slime" ? 4 : 5;
     const hp = Math.round(data.hp + levelBonus * hpBonus);
     game.enemies.push({
       ...data,
+      zone:zone.id,
       x,y,
       hp,
       maxHp: hp,
@@ -852,9 +2217,24 @@
       squash:0,
       knockX:0,
       knockY:0,
+      warned:false,
       wander: rand(0, Math.PI*2),
       wanderTimer: rand(.5,2.2)
     });
+  }
+
+  function maintainFieldSpawns(dt){
+    if(game.map !== "field") return;
+    game.spawnTimer = Math.max(0, (game.spawnTimer || 0) - dt);
+
+    // 敵が少なくなった時は定期補充。
+    // 狩っている最中に敵が枯れるのを防ぐ。
+    if(game.enemies.length < FIELD_TARGET_ENEMY_COUNT && game.spawnTimer <= 0){
+      const missing = FIELD_TARGET_ENEMY_COUNT - game.enemies.length;
+      const batch = Math.min(2, missing);
+      for(let i=0;i<batch;i++) spawnMonster();
+      game.spawnTimer = rand(1.2,2.1);
+    }
   }
 
   function toast(text){
@@ -883,52 +2263,62 @@
     }
   }
 
-  function playerAttack(){
+  function playerAttack(targetEnemy=null){
     if(game.attackCooldown > 0 || !game.p || game.sit) return;
     const p = game.p;
+    if(targetEnemy){
+      p.face = Math.atan2(targetEnemy.y - p.y, targetEnemy.x - p.x);
+    }
     const job = currentJob();
     if(job.cost && p.sp < job.cost){
       toast("SPが足りません");
       return;
     }
     if(job.cost) p.sp = Math.max(0, p.sp - job.cost);
-    game.attackCooldown = job.cooldown;
+    game.attackCooldown = attackCooldown(job);
     p.attackTimer = .18;
     const range = job.range;
     game.attackFx.push({kind:job.id,x:p.x,y:p.y,a:p.face,life:.18,max:.18,range});
     let hit = false;
-    const arc = job.id === "mage" ? Math.PI*.25 : Math.PI*.55;
+    const isMagicBasic = job.id === "mage" || job.id === "priest";
+    const arc = isMagicBasic ? Math.PI*.25 : Math.PI*.55;
     for(const e of [...game.enemies]){
+      if(targetEnemy && e !== targetEnemy) continue;
       const dx = e.x - p.x;
       const dy = e.y - p.y;
       const d = Math.hypot(dx,dy);
       const a = Math.atan2(dy,dx);
       const diff = Math.atan2(Math.sin(a-p.face), Math.cos(a-p.face));
       if(d < range + e.r && Math.abs(diff) < arc){
-        const rate = job.id === "mage" ? 1.2 : job.id === "thief" ? .88 : 1.0;
-        const dmg = Math.round(atk() * rate * rand(.85,1.15));
-        damageEnemy(e, dmg, p.x, p.y, job.id === "mage" ? 38 : 26, "normal");
+        const basePower = isMagicBasic ? mat() : atk();
+        const rate = job.id === "mage" ? 1.2 : job.id === "priest" ? .78 : job.id === "thief" ? .88 : 1.0;
+        const rolled = rollDamage(basePower * rate * rand(.85,1.15));
+        damageEnemy(e, rolled.dmg, p.x, p.y, isMagicBasic ? 34 : 26, rolled.crit ? "crit" : job.id === "priest" ? "holy" : "normal");
+        if(rolled.crit) hitText(e.x, e.y - e.r - 30, "CRITICAL!", true);
         hit = true;
-        if(job.id === "mage") break;
+        if(isMagicBasic) break;
       }
     }
     if(!hit) burst(p.x + Math.cos(p.face)*Math.min(45,range), p.y + Math.sin(p.face)*Math.min(45,range), 4, "miss");
     else game.shake = Math.max(game.shake || 0, .05);
   }
 
-  function useJobSkill(){
+  function useJobSkill(directionAngle=null){
     if(!game.p || game.sit) return;
     const job = currentJob();
-    if(job.id === "fighter") return fighterSlash();
-    if(job.id === "mage") return mageFirebolt();
+    if(Number.isFinite(directionAngle)) game.p.face = directionAngle;
+    if(job.id === "fighter") return fighterSlash(directionAngle);
+    if(job.id === "mage") return mageFirebolt(directionAngle);
+    if(job.id === "priest") return priestHeal(directionAngle);
     toast(`${job.name}の専用スキルは準備中です`);
   }
 
-  function fighterSlash(){
+  function fighterSlash(directionAngle=null){
     const p = game.p;
     const job = currentJob();
     const cost = job.skillCost || 0;
     const cd = job.skillCooldown || 2.2;
+    if(Number.isFinite(directionAngle)) p.face = directionAngle;
 
     if(game.skillCooldown > 0){
       toast(`スラッシュ再使用まで ${game.skillCooldown.toFixed(1)}秒`);
@@ -959,8 +2349,9 @@
       const diff = Math.atan2(Math.sin(a-p.face), Math.cos(a-p.face));
       if(d < range + e.r && Math.abs(diff) < arc){
         const slashRate = e.id === "moco_horn" ? 1.38 : e.id === "kinokko" ? 1.75 : 2.18;
-        const dmg = Math.round(atk() * slashRate * rand(.92,1.10));
-        damageEnemy(e, dmg, p.x, p.y, 58, "slash");
+        const rolled = rollDamage(atk() * slashRate * rand(.92,1.10));
+        damageEnemy(e, rolled.dmg, p.x, p.y, 58, rolled.crit ? "crit" : "slash");
+        if(rolled.crit) hitText(e.x, e.y - e.r - 30, "CRITICAL!", true);
         hits++;
       }
     }
@@ -977,11 +2368,12 @@
     syncUI();
   }
 
-  function mageFirebolt(){
+  function mageFirebolt(directionAngle=null){
     const p = game.p;
     const job = currentJob();
     const cost = job.skillCost || 14;
     const cd = job.skillCooldown || 2.8;
+    if(Number.isFinite(directionAngle)) p.face = directionAngle;
 
     if(game.skillCooldown > 0){
       toast(`ファイアボルト再使用まで ${game.skillCooldown.toFixed(1)}秒`);
@@ -1020,8 +2412,9 @@
 
     if(target){
       const fireRate = target.id === "moco_horn" ? 1.45 : target.id === "kinokko" ? 1.75 : 2.05;
-      const dmg = Math.round(atk() * fireRate * rand(.90,1.12));
-      damageEnemy(target, dmg, p.x, p.y, 42, "fire");
+      const rolled = rollDamage(mat() * fireRate * rand(.90,1.12));
+      damageEnemy(target, rolled.dmg, p.x, p.y, 42, rolled.crit ? "crit" : "fire");
+      if(rolled.crit) hitText(target.x, target.y - target.r - 42, "CRITICAL!", true);
       hitText(target.x, target.y - target.r - 28, "FIRE!", true);
       burst(target.x, target.y, 16, "fire");
       game.shake = Math.max(game.shake || 0, .10);
@@ -1033,19 +2426,66 @@
     syncUI();
   }
 
+  function priestHealAmount(){
+    return Math.max(20, Math.round(28 + mat() * .95 + statValue("int") * 4 + statValue("vit") * 2));
+  }
+
+  function priestHeal(directionAngle=null){
+    const p = game.p;
+    const job = currentJob();
+    const cost = job.skillCost || 12;
+    const cd = job.skillCooldown || 3.0;
+    if(Number.isFinite(directionAngle)) p.face = directionAngle;
+
+    if(game.skillCooldown > 0){
+      toast(`ヒール再使用まで ${game.skillCooldown.toFixed(1)}秒`);
+      syncUI();
+      return;
+    }
+    if(p.sp < cost){
+      toast(`SPが足りません / 必要SP ${cost}`);
+      syncUI();
+      return;
+    }
+    if(p.hp >= p.maxHp){
+      toast("HPは満タンです");
+      syncUI();
+      return;
+    }
+
+    p.sp = Math.max(0, p.sp - cost);
+    game.skillCooldown = cd;
+    game.attackCooldown = Math.max(game.attackCooldown, .18);
+    p.attackTimer = .18;
+
+    const before = p.hp;
+    const heal = priestHealAmount();
+    p.hp = Math.min(p.maxHp, p.hp + heal);
+    const actual = Math.max(0, Math.round(p.hp - before));
+
+    game.attackFx.push({kind:"priestHeal", x:p.x, y:p.y, a:0, life:.42, max:.42, range:42});
+    hitText(p.x, p.y - 38, `+${actual}`, true);
+    burst(p.x, p.y, 18, "heal");
+    toast(`ヒール +${actual}`);
+    syncUI();
+  }
+
   function damageEnemy(e, dmg, sx=null, sy=null, knock=0, kind="normal"){
     e.hp -= dmg;
-    e.hurt = kind === "slash" ? .26 : kind === "fire" ? .22 : .18;
-    e.squash = kind === "slash" ? .22 : kind === "fire" ? .18 : .13;
+    e.hurt = kind === "slash" ? .26 : kind === "fire" ? .22 : kind === "holy" ? .20 : .18;
+    e.squash = kind === "slash" ? .22 : kind === "fire" ? .18 : kind === "holy" ? .15 : .13;
     if(sx !== null && sy !== null && knock > 0){
       const a = Math.atan2(e.y - sy, e.x - sx);
       const kr = 1 - (e.knockResist || 0);
       e.knockX = (e.knockX || 0) + Math.cos(a) * knock * kr;
       e.knockY = (e.knockY || 0) + Math.sin(a) * knock * kr;
     }
-    const label = kind === "slash" || kind === "fire" ? `${dmg}!` : String(dmg);
-    hitText(e.x, e.y - e.r - 14, label, kind === "slash" || kind === "fire");
-    burst(e.x, e.y, kind === "slash" ? 15 : kind === "fire" ? 13 : 9, kind === "slash" ? "slash" : kind === "fire" ? "fire" : "hit");
+    const label = kind === "slash" || kind === "fire" || kind === "holy" ? `${dmg}!` : String(dmg);
+    hitText(e.x, e.y - e.r - 14, label, kind === "slash" || kind === "fire" || kind === "holy");
+    if(kind === "slash" || kind === "fire" || dmg >= Math.max(18, e.maxHp * .28)){
+      hitText(e.x, e.y - e.r - 30, "POWERFUL!", true);
+    }
+    burst(e.x, e.y, kind === "slash" ? 15 : kind === "fire" ? 13 : kind === "holy" ? 11 : 9, kind === "slash" ? "slash" : kind === "fire" ? "fire" : kind === "holy" ? "heal" : "hit");
     if(e.hp <= 0) killEnemy(e, kind);
   }
 
@@ -1064,7 +2504,7 @@
     updateQuestProgress("kill", e.id, 1);
 
     dropItem(e.item, e.x, e.y);
-    if(e.rareItem && Math.random() < (e.rareRate || 0)){
+    if(e.rareItem && Math.random() < clamp((e.rareRate || 0) + rareBonusRate(), 0, .75)){
       dropItem(e.rareItem, e.x, e.y, true);
       hitText(e.x, e.y - 88, `RARE ${ITEMS[e.rareItem]?.name || e.rareItem}!`, true);
     }
@@ -1072,7 +2512,7 @@
     game.shake = Math.max(game.shake || 0, kind === "slash" ? .16 : .08);
 
     if(game.map === "field"){
-      setTimeout(()=>{ if(game.map==="field" && game.enemies.length < 7) spawnMonster(); }, 850);
+      setTimeout(()=>{ if(game.map==="field" && game.enemies.length < FIELD_TARGET_ENEMY_COUNT) spawnMonster(); }, 900);
     }
   }
 
@@ -1094,7 +2534,7 @@
     if(p.inv > 0) return;
     const job = currentJob();
     const defRate = job.defRate || 1;
-    const final = Math.max(1, Math.round(amount / defRate));
+    const final = Math.max(1, Math.round(amount / defRate - def() * .08));
     p.hp = Math.max(0, p.hp - final);
     p.inv = .5;
     hitText(p.x, p.y - 32, "-" + final);
@@ -1106,7 +2546,7 @@
     }
   }
 
-  function pickup(){
+  function pickup(showToast=true, allowVillageFallback=true){
     if(!game.p) return;
     let picked = 0;
     for(const d of [...game.drops]){
@@ -1121,17 +2561,29 @@
       }
     }
     if(picked > 0){
-      toast(`${picked}個拾いました`);
+      if(showToast) toast(`${picked}個拾いました`);
       persist();
-    }else{
+    }else if(allowVillageFallback){
       if(game.map === "village"){
         const near = nearestVillageObject();
         if(near) handleVillageInteraction(near);
-        else toast("近くに話せる人・施設はありません");
-      }else{
+        else if(showToast) toast("近くに話せる人・施設はありません");
+      }else if(showToast){
         toast("近くに拾えるものはありません");
       }
     }
+  }
+
+  function toggleSit(){
+    if(!game.p) return;
+    game.sit = !game.sit;
+    if(game.sit){
+      input.x = 0; input.y = 0;
+      toast("座って休憩します");
+    }else{
+      toast("休憩をやめました");
+    }
+    syncUI();
   }
 
 
@@ -1148,9 +2600,22 @@
     toast(obj.message || "調べました");
   }
 
+  function dialogueFaceFor(name){
+    if(String(name).includes("案内")) return "案";
+    if(String(name).includes("守衛")) return "守";
+    if(String(name).includes("道具")) return "店";
+    if(String(name).includes("鍛冶")) return "鍛";
+    if(String(name).includes("転職")) return "職";
+    if(String(name).includes("掲示")) return "板";
+    if(String(name).includes("倉庫")) return "倉";
+    return "村";
+  }
+
   function openDialogue(name, text){
     $("dialogueName").textContent = name;
     $("dialogueText").textContent = text;
+    const face = $("dialogueFace");
+    if(face) face.textContent = dialogueFaceFor(name);
     $("dialogueBox").classList.add("show");
   }
 
@@ -1160,19 +2625,48 @@
 
   function openFacility(kind, title, message){
     closeDialogue();
+    clearFacilityThemes();
     $("facilityTitle").textContent = title;
     const box = $("facilityContent");
     box.innerHTML = "";
     if(kind === "shop"){
+      setFacilityShopTheme(true);
+      $("facilityTitle").innerHTML = "Item Shop <small>道具屋</small>";
+      const herbCount = itemCount("herb");
+      const canBuyHerb = save.gold >= 10;
       box.innerHTML = `
-        <div class="facility-row">
-          <div class="row-head"><b>🌿 やくそう</b><span>10G</span></div>
-          <p>HPを35回復する基本アイテム。ショートカット1またはバッグから使えます。</p>
-          <button id="buyHerbBtn" class="green">購入する</button>
-        </div>
-        <div class="facility-row">
-          <div class="row-head"><b>店主</b><span>道具屋</span></div>
-          <p>${message}</p>
+        <div class="shop-mmo-window">
+          <div class="shop-tabs">
+            <span class="active">道具</span><span>回復</span><span>おすすめ</span>
+          </div>
+          <div class="shop-guide-line">冒険前に必要な道具を準備できます。所持Gと所持数を確認して購入してください。</div>
+          <div class="shop-summary-grid">
+            <div><b>GOLD</b><span>${save.gold}G</span></div>
+            <div><b>やくそう</b><span>${herbCount}個</span></div>
+            <div><b>価格</b><span>10G</span></div>
+          </div>
+          <div class="shop-board">
+            <div class="shop-section-title"><b>販売リスト</b><span>ITEM LIST</span></div>
+            <div class="shop-item-row available">
+              <div class="shop-item-icon">🌿</div>
+              <div class="shop-item-main">
+                <b>やくそう</b>
+                <small>HPを35回復する基本アイテム。右下の薬ボタン、またはバッグから使えます。</small>
+                <div class="shop-item-meta"><span>種類：消費</span><span>所持：${herbCount}</span><span>価格：10G</span></div>
+              </div>
+              <button id="buyHerbBtn" class="green" ${canBuyHerb ? "" : "disabled"}>購入</button>
+            </div>
+            <div class="shop-item-row disabled">
+              <div class="shop-item-icon">🧪</div>
+              <div class="shop-item-main">
+                <b>小さなSP薬</b>
+                <small>今後追加予定。メイジやプリースト向けのSP回復アイテム候補です。</small>
+                <div class="shop-item-meta"><span>種類：消費</span><span>所持：-</span><span>未入荷</span></div>
+              </div>
+              <button disabled>未入荷</button>
+            </div>
+          </div>
+          <div class="shop-message-box"><b>店主</b><span>${message}</span></div>
         </div>`;
       $("facilityOverlay").classList.add("show");
       setTimeout(()=>{
@@ -1290,42 +2784,96 @@
     renderSmith("素材を集めれば、装備を増やせるぞ。");
   }
 
+
   function renderSmith(message){
-    $("facilityTitle").textContent = "鍛冶屋";
+    setFacilitySmithTheme(true);
+    $("facilityTitle").innerHTML = "Smithy <small>鍛冶屋</small>";
     const cost = smithCost();
     const craftIds = Object.keys(EQUIP_RECIPES);
     const box = $("facilityContent");
+    const currentWeaponId = save.equipment?.weapon;
+    const currentWeapon = EQUIPMENT[currentWeaponId]?.name || "未装備";
+    const canUpgrade = save.gold >= cost;
+
+    function recipeState(id){
+      const r = EQUIP_RECIPES[id];
+      if(save.ownedEquip?.[id]) return { label:"所持済", cls:"owned" };
+      if(save.gold < r.gold) return { label:"G不足", cls:"lack" };
+      for(const [mat, count] of Object.entries(r.materials || {})){
+        if(itemCount(mat) < count) return { label:"素材不足", cls:"lack" };
+      }
+      return { label:"作成可", cls:"ready" };
+    }
+    function recipeMaterialChips(materials){
+      const entries = Object.entries(materials || {});
+      if(!entries.length) return `<span class="smith-material-chip ready">素材なし</span>`;
+      return entries.map(([id,count]) => {
+        const item = ITEMS[id] || { name:id, icon:"◇" };
+        const have = itemCount(id);
+        return `<span class="smith-material-chip ${have >= count ? "ready" : "lack"}">${item.icon || "◇"} ${item.name} ${have}/${count}</span>`;
+      }).join("");
+    }
+
     box.innerHTML = `
-      <div class="facility-row">
-        <div class="row-head"><b>⚔ 武器強化 Lv${save.weaponLevel}</b><span>ATK +${(save.weaponLevel-1)*2}</span></div>
-        <p>現在装備中の武器に、共通の強化値を加えます。現在の強化費用：${cost}G</p>
-        <button id="upgradeWeaponBtn" class="green">強化する</button>
-      </div>
-      <div class="facility-row">
-        <div class="row-head"><b>装備作成</b><span>v0.6</span></div>
-        <p>${message}</p>
-      </div>
-      <div class="material-inventory">
-        <b>所持素材</b>
-        <div class="material-chip-row">${materialInventoryText()}</div>
-      </div>
-      <div class="equip-list">
-        ${craftIds.map(id => {
-          const e = EQUIPMENT[id];
-          const r = EQUIP_RECIPES[id];
-          const owned = save.ownedEquip?.[id];
-          const disabled = owned || !canCraftEquipment(id);
-          return `
-            <div class="equip-item">
-              <div class="equip-item-icon">${e.icon}</div>
-              <div class="equip-item-desc">
-                <b>${e.name}</b> <span class="quest-badge">${EQUIP_SLOTS[e.slot]}</span> <span class="quest-badge">${equipJobText(e)}</span>
-                <small>${e.desc}<br>効果：ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}</small>
-                <span class="craft-cost">費用：${r.gold}G / 素材：${materialText(r.materials)}</span>
-              </div>
-              ${owned ? `<span class="job-now">所持</span>` : `<button id="craft_${id}" class="green" ${disabled ? "disabled" : ""}>作成</button>`}
-            </div>`;
-        }).join("")}
+      <div class="smith-mmo-window">
+        <div class="smith-tabs">
+          <span class="active">強化</span><span>作成</span><span>素材</span>
+        </div>
+        <div class="smith-guide-line">素材とGを使って、狩りやすさを上げます。作成可否は右端の状態で確認できます。</div>
+
+        <div class="smith-summary-grid">
+          <div><b>GOLD</b><span>${save.gold}G</span></div>
+          <div><b>武器Lv</b><span>Lv${save.weaponLevel}</span></div>
+          <div><b>強化費</b><span>${cost}G</span></div>
+        </div>
+
+        <div class="smith-board smith-upgrade-board">
+          <div class="smith-section-title"><b>武器強化</b><span>WEAPON UPGRADE</span></div>
+          <div class="smith-upgrade-row">
+            <div class="smith-upgrade-icon">⚔</div>
+            <div class="smith-upgrade-main">
+              <b>${currentWeapon} Lv${save.weaponLevel}</b>
+              <small>現在装備中の武器に共通強化値を加えます。現在の補正：ATK +${(save.weaponLevel-1)*2}</small>
+              <div class="smith-item-meta"><span>費用：${cost}G</span><span>所持：${save.gold}G</span><span>${canUpgrade ? "強化可能" : "G不足"}</span></div>
+            </div>
+            <button id="upgradeWeaponBtn" class="green" ${canUpgrade ? "" : "disabled"}>強化</button>
+          </div>
+        </div>
+
+        <div class="smith-material-box">
+          <b>所持素材</b>
+          <div class="material-chip-row">${materialInventoryText()}</div>
+        </div>
+
+        <div class="smith-board">
+          <div class="smith-section-title"><b>装備作成</b><span>CRAFT LIST</span></div>
+          <div class="smith-message-box"><b>鍛冶屋</b><span>${message}</span></div>
+          <div class="smith-recipe-list">
+            ${craftIds.map(id => {
+              const e = EQUIPMENT[id];
+              const r = EQUIP_RECIPES[id];
+              const owned = save.ownedEquip?.[id];
+              const disabled = owned || !canCraftEquipment(id);
+              const state = recipeState(id);
+              return `
+                <div class="smith-recipe-row ${state.cls}">
+                  <div class="smith-recipe-icon">${e.icon}</div>
+                  <div class="smith-recipe-main">
+                    <div class="smith-recipe-name"><b>${e.name}</b><span>${EQUIP_SLOTS[e.slot]}</span><span>${equipJobText(e)}</span></div>
+                    <small>${e.desc}</small>
+                    <div class="smith-effect-grid">
+                      <span>ATK+${e.atk||0}</span><span>HP+${e.hp||0}</span><span>SP+${e.sp||0}</span><span>SPD${(e.speed||0)>=0?"+":""}${e.speed||0}</span>
+                    </div>
+                    <div class="smith-material-row"><span class="smith-material-chip gold">${r.gold}G</span>${recipeMaterialChips(r.materials)}</div>
+                  </div>
+                  <div class="smith-recipe-action">
+                    <em>${state.label}</em>
+                    ${owned ? `<span class="job-now">所持</span>` : `<button id="craft_${id}" class="green" ${disabled ? "disabled" : ""}>作成</button>`}
+                  </div>
+                </div>`;
+            }).join("")}
+          </div>
+        </div>
       </div>`;
     setTimeout(()=>{
       const up = $("upgradeWeaponBtn");
@@ -1336,6 +2884,7 @@
       }
     },0);
   }
+
 
   function applyStatRefresh(oldHpRate=1, oldSpRate=1){
     if(!game.p) return;
@@ -1385,59 +2934,114 @@
     toast(`${EQUIP_SLOTS[slot]}装備を外しました`);
   }
 
+
   function renderEquipmentScreen(filterSlot=null){
-    $("facilityTitle").textContent = "装備";
+    setFacilityEquipTheme(true);
+    $("facilityTitle").innerHTML = "Equipment <small>装備</small>";
     const box = $("facilityContent");
     const stats = equipStats();
     const slotEntries = Object.entries(EQUIP_SLOTS);
     const ownedIds = Object.keys(save.ownedEquip || {}).filter(id => EQUIPMENT[id]);
     const shownIds = filterSlot ? ownedIds.filter(id => EQUIPMENT[id].slot === filterSlot) : ownedIds;
     const currentWeapon = EQUIPMENT[save.equipment?.weapon]?.name || "なし";
+    const activeLabel = filterSlot ? EQUIP_SLOTS[filterSlot] : "全部";
+
+    function slotPanel(slot,label){
+      const id = save.equipment?.[slot];
+      const e = EQUIPMENT[id];
+      const removable = e && slot !== "weapon" && slot !== "body";
+      return `
+        <div class="equip-current-slot ${filterSlot === slot ? 'active' : ''}" data-slot="${slot}">
+          <button class="equip-current-head" id="equipSlotFilter_${slot}"><b>${label}</b><span>${e ? e.icon : "—"}</span></button>
+          <div class="equip-current-body">
+            <strong>${e ? e.name : "未装備"}</strong>
+            <small>${e ? `${equipJobText(e)} / ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}` : "この部位はまだ空です"}</small>
+          </div>
+          ${removable ? `<button id="unequip_${slot}" class="equip-mini-btn blue">外す</button>` : `<em>${slot === "weapon" || slot === "body" ? "固定" : "空き"}</em>`}
+        </div>`;
+    }
+
+    function equipRow(id){
+      const e = EQUIPMENT[id];
+      const equipped = save.equipment?.[e.slot] === id;
+      const canEquip = canEquipForCurrentJob(e);
+      return `
+        <div class="equip-list-row ${equipped ? 'equipped' : ''} ${!canEquip ? 'locked' : ''}">
+          <div class="equip-row-icon">${e.icon}</div>
+          <div class="equip-row-main">
+            <div class="equip-row-title"><b>${e.name}</b><span>${EQUIP_SLOTS[e.slot]}</span><span>${equipJobText(e)}</span></div>
+            <small>${e.desc}</small>
+            <div class="equip-effect-grid">
+              <i>ATK ${e.atk||0}</i><i>HP ${e.hp||0}</i><i>SP ${e.sp||0}</i><i>SPD ${(e.speed||0)>=0?"+":""}${e.speed||0}</i>
+            </div>
+          </div>
+          <div class="equip-row-action">
+            ${!canEquip ? `<button disabled>専用外</button>` : equipped ? `<span>装備中</span>` : `<button id="equip_${id}" class="green">装備</button>`}
+          </div>
+        </div>`;
+    }
+
     box.innerHTML = `
-      <div class="equip-summary">
-        <b>現在ステータス</b><br>
-        職業：${currentJob().icon} ${currentJob().name} / 武器：${currentWeapon} Lv${save.weaponLevel}<br>
-        HP：${maxHp()} / SP：${maxSp()} / ATK：${atk()} / 速度：${playerSpeed()}<br>
-        装備補正：ATK+${stats.atk} / HP+${stats.hp} / SP+${stats.sp} / 速度${stats.speed>=0?"+":""}${stats.speed}<br>見た目：素体＋頭/胴/武器/盾/背中/アクセをレイヤー表示。v0.6で輪郭と装備差分を強化
-      </div>
-      <div class="equip-slot-grid">
-        ${slotEntries.map(([slot,label])=>{
-          const id = save.equipment?.[slot];
-          const e = EQUIPMENT[id];
-          return `
-            <div class="equip-slot">
-              <b>${label}<span>${e ? e.icon : "—"}</span></b>
-              <small>${e ? `${e.name}<br>${equipJobText(e)} / ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}` : "未装備"}</small>
-              ${e && slot !== "weapon" && slot !== "body" ? `<button id="unequip_${slot}" class="blue" style="margin-top:6px;padding:5px 7px;font-size:11px;">外す</button>` : ""}
-            </div>`;
-        }).join("")}
-      </div>
-      <div class="equip-tabs">
-        <button id="equipFilter_all" class="blue">全部</button>
-        ${slotEntries.map(([slot,label])=>`<button id="equipFilter_${slot}">${label}</button>`).join("")}
-      </div>
-      <div class="equip-list">
-        ${shownIds.length ? shownIds.map(id => {
-          const e = EQUIPMENT[id];
-          const equipped = save.equipment?.[e.slot] === id;
-          const canEquip = canEquipForCurrentJob(e);
-          return `
-            <div class="equip-item">
-              <div class="equip-item-icon">${e.icon}</div>
-              <div class="equip-item-desc">
-                <b>${e.name}</b> <span class="quest-badge">${EQUIP_SLOTS[e.slot]}</span> <span class="quest-badge">${equipJobText(e)}</span>
-                <small>${e.desc}<br>ATK+${e.atk||0} / HP+${e.hp||0} / SP+${e.sp||0} / 速度${(e.speed||0)>=0?"+":""}${e.speed||0}</small>
+      <div class="equip-mmo-window">
+        <div class="equip-mini-tabs">
+          <span class="equip-mini-tab active">装備</span>
+          <span class="equip-mini-tab">所持品</span>
+          <span class="equip-mini-tab">強化</span>
+          <span class="equip-mini-logo">${activeLabel}</span>
+        </div>
+
+        <div class="equip-mainbox">
+          <div class="equip-page-title"><b>Equipment</b><span>現在の装備と所持装備を確認できます。</span></div>
+
+          <div class="equip-summary-line">
+            <span>職業：${currentJob().icon} ${currentJob().name}</span>
+            <span>武器：${currentWeapon} Lv${save.weaponLevel}</span>
+            <span>未使用pt：${availableStatPoints()}</span>
+          </div>
+
+          <div class="equip-status-strip">
+            <div><b>HP</b><span>${maxHp()}</span></div>
+            <div><b>SP</b><span>${maxSp()}</span></div>
+            <div><b>ATK</b><span>${atk()}</span></div>
+            <div><b>MAT</b><span>${mat()}</span></div>
+            <div><b>DEF</b><span>${def()}</span></div>
+            <div><b>MOV</b><span>${playerSpeed()}</span></div>
+          </div>
+
+          <div class="equip-layout-grid">
+            <div class="equip-current-panel">
+              <div class="equip-section-caption"><b>装備中</b><span>クリックで絞込</span></div>
+              <div class="equip-current-grid">
+                ${slotEntries.map(([slot,label]) => slotPanel(slot,label)).join("")}
               </div>
-              ${!canEquip ? `<button disabled>専用外</button>` : equipped ? `<span class="job-now">装備中</span>` : `<button id="equip_${id}" class="green">装備</button>`}
-            </div>`;
-        }).join("") : `<div class="facility-row"><b>この部位の装備は未所持です</b><p>鍛冶屋で装備を作成できます。</p></div>`}
+              <div class="equip-bonus-box">
+                <b>装備補正</b>
+                <span>ATK+${stats.atk} / HP+${stats.hp} / SP+${stats.sp} / 速度${stats.speed>=0?"+":""}${stats.speed}</span>
+              </div>
+            </div>
+
+            <div class="equip-owned-panel">
+              <div class="equip-filter-tabs">
+                <button id="equipFilter_all" class="${!filterSlot ? 'active' : ''}">全部</button>
+                ${slotEntries.map(([slot,label])=>`<button id="equipFilter_${slot}" class="${filterSlot === slot ? 'active' : ''}">${label}</button>`).join("")}
+              </div>
+              <div class="equip-owned-head"><b>所持装備</b><span>${shownIds.length}件</span></div>
+              <div class="equip-owned-list">
+                ${shownIds.length ? shownIds.map(equipRow).join("") : `<div class="equip-empty-box"><b>この部位の装備は未所持です</b><p>鍛冶屋で装備を作成できます。</p></div>`}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>`;
     $("facilityOverlay").classList.add("show");
     setTimeout(()=>{
-      $("equipFilter_all").onclick = () => renderEquipmentScreen(null);
+      const all = $("equipFilter_all");
+      if(all) all.onclick = () => renderEquipmentScreen(null);
       for(const [slot] of slotEntries){
         const filter = $("equipFilter_" + slot);
         if(filter) filter.onclick = () => renderEquipmentScreen(slot);
+        const slotFilter = $("equipSlotFilter_" + slot);
+        if(slotFilter) slotFilter.onclick = () => renderEquipmentScreen(slot);
         const unequip = $("unequip_" + slot);
         if(unequip) unequip.onclick = () => unequipSlot(slot);
       }
@@ -1448,6 +3052,7 @@
     },0);
   }
 
+
   function openEquipmentScreen(){
     $("menuOverlay").classList.remove("show");
     $("bagOverlay").classList.remove("show");
@@ -1455,61 +3060,96 @@
   }
 
   function renderJobHall(){
-    $("facilityTitle").textContent = "転職の館";
+    setFacilityJobTheme(true);
+    $("facilityTitle").innerHTML = "Job <small>転職の館</small>";
     const now = currentJob();
     const box = $("facilityContent");
     box.innerHTML = `
-      <div class="facility-row">
-        <div class="row-head"><b>現在の職業</b><span class="quest-badge">${now.icon} ${now.name}</span></div>
-        <p>職業を変えると、最大HP/SP・攻撃・防御・速度・射程・専用スキルが変わります。見た目は現在、素体を仮表示しています。</p>
-        <div class="job-stat-box">
-          <div class="job-stat-grid">
-            <div>HP：${maxHp()} / 補正×${now.hpRate}</div>
-            <div>SP：${maxSp()} / 補正×${now.spRate}</div>
-            <div>攻撃：${atk()} / 補正×${now.atkRate}</div>
-            <div>防御：被ダメ÷${now.defRate || 1}</div>
-            <div>速度：${playerSpeed()}</div>
-            <div>射程：${now.range}</div>
+      <div class="job-window">
+        <div class="job-tabs" aria-label="職業メニュー">
+          <span class="active">①職業選択</span>
+          <span>②スキルリンク</span>
+          <span>③ステータスポイント</span>
+        </div>
+
+        <div class="job-guide-line">転職したい職業を選んでください。</div>
+
+        <div class="job-current-summary">
+          <div class="job-current-main">
+            <span class="job-current-icon">${now.icon}</span>
+            <div>
+              <b>現在：${now.name}</b>
+              <small>${now.type} / ${now.summary}</small>
+            </div>
           </div>
-          <div class="skill-tip">${now.icon} 通常：${now.attackName || "通常攻撃"} / ${now.tip || now.summary}</div>
-          <div class="skill-tip fighter-skill-tip">専用スキル：${now.skillName || "未実装"} / SP ${now.skillCost || 0} / CT ${now.skillCooldown || 0}s<br>${now.skillDesc || "今後追加予定です。"}</div>
-          <div class="skill-tip-row">
-            <b>操作</b>
-            <span>スマホ：攻撃ボタン左上の「技」または下ショートカット2 / PC：2キー</span>
-            <span class="skill-cd-badge">${skillStatusText()}</span>
+          <div class="job-current-data">
+            <span>HP ${maxHp()}</span><span>SP ${maxSp()}</span><span>ATK ${atk()}</span><span>MAT ${mat()}</span><span>DEF ${def()}</span><span>MOV ${playerSpeed()}</span>
+          </div>
+          <div class="job-current-skill">
+            <span>通常：${now.attackName || "通常攻撃"}</span>
+            <span>専用：${now.skillName || "未実装"} / ${skillStatusText()}</span>
           </div>
         </div>
-      </div>
-      <div class="job-card-grid">
-        ${Object.values(JOBS).map(job => `
-          <div class="facility-row job-card">
-            <div class="job-icon">${job.icon}</div>
-            <div class="job-desc">
-              <b>${job.name}</b> <span class="quest-badge">${job.type}</span>
-              <small>
-                ${job.summary}<br>
-                通常：${job.attackName || "通常攻撃"} / 射程：${job.range} / CT：${job.cooldown}s / 消費SP：${job.cost || 0}<br>
-                専用：${job.skillName || "未実装"} / SP：${job.skillCost || 0} / CT：${job.skillCooldown || 0}s
-              </small>
-            </div>
-            ${job.name === save.currentJob ? `<span class="job-now">現在</span>` : `<button id="jobBtn_${job.id}" class="green">転職</button>`}
+
+        <div class="job-tree-scroll" aria-label="段階別職業一覧">
+          <div class="job-tree-board">
+            ${JOB_TREE_TIERS.map(tier => `
+              <div class="job-tier ${tier.className}">
+                <div class="job-tier-title">${tier.label}</div>
+                ${tier.jobs.map(entry => {
+                  const job = jobDataById(entry.id);
+                  const state = jobUnlockState(entry);
+                  const current = JOBS[entry.id] && job.name === save.currentJob;
+                  const selectable = state === "selectable" && !current;
+                  const req = jobRequirementText(entry);
+                  return `
+                    <div class="job-mini-card ${state} ${current ? "current" : ""}">
+                      <div class="job-mini-level">
+                        <span>EXP</span>
+                        <i></i>
+                        <b>${jobLevelText(entry.id)}</b>
+                      </div>
+                      <div class="job-mini-main">
+                        <span class="job-mini-icon">${entry.icon || job.icon || "？"}</span>
+                        <b>${job.name}</b>
+                      </div>
+                      <small title="${req}">${entry.role} / ${req}</small>
+                      <div class="job-mini-actions">
+                        <em>${jobStateLabel(entry)}</em>
+                        ${selectable ? `<button id="jobBtn_${entry.id}" class="green">転職</button>` : current ? `<button disabled>現在</button>` : `<button disabled>未解放</button>`}
+                      </div>
+                    </div>`;
+                }).join("")}
+              </div>
+            `).join("")}
           </div>
-        `).join("")}
+        </div>
+
+        <div class="job-note-box">
+          <b>職業成長メモ</b>
+          <span>まずは1次職を育て、将来的に2次職・3次職・4次職へ進む構成です。上位職は条件表示を先に出し、実装時に解放します。</span>
+        </div>
       </div>`;
     setTimeout(()=>{
-      for(const job of Object.values(JOBS)){
-        const btn = $("jobBtn_" + job.id);
-        if(btn) btn.onclick = () => changeJob(job.id);
+      for(const tier of JOB_TREE_TIERS){
+        for(const entry of tier.jobs){
+          const btn = $("jobBtn_" + entry.id);
+          if(btn) btn.onclick = () => changeJob(entry.id);
+        }
       }
     },0);
   }
 
   function changeJob(jobId){
+    if(!JOBS[jobId]){
+      toast("この職業はまだ未実装です");
+      return;
+    }
     const job = JOBS[jobId] || JOBS.fighter;
     const hpRate = game.p ? Math.max(.05, game.p.hp / game.p.maxHp) : 1;
     const spRate = game.p ? Math.max(0, game.p.sp / game.p.maxSp) : 1;
     save.currentJob = job.name;
-    save.jobLevels = save.jobLevels || { fighter:1, mage:1, thief:1 };
+    save.jobLevels = save.jobLevels || { fighter:1, mage:1, thief:1, priest:1 };
     save.jobLevels[jobId] = save.jobLevels[jobId] || 1;
     ensureCurrentJobEquipment();
     if(game.p){
@@ -1550,39 +3190,115 @@
     }
     save.gold -= cost;
     save.weaponLevel++;
+    updateQuestProgress("upgrade", "weapon", 1);
     persist();
     syncUI();
-    toast(`木の剣がLv${save.weaponLevel}になりました`);
-    renderSmith("いい感じに鍛えられたな。");
+    toast(`武器強化 Lv${save.weaponLevel}！`);
+    renderSmith("いい感じに鍛えられたな。次は素材装備や強敵への準備だ。");
   }
 
   function renderQuestBoard(){
+    setFacilityQuestTheme(true);
+    $("facilityTitle").innerHTML = "Quest Board <small>クエスト掲示板</small>";
     const box = $("facilityContent");
-    const guide = currentGuideQuest();
+    const stage = loopStageInfo();
+    const guide = stage.guide;
+    const total = QUEST_DEFS.length;
+    const accepted = QUEST_DEFS.filter(def => quest(def.id).status === "accepted").length;
+    const complete = QUEST_DEFS.filter(def => quest(def.id).status === "complete").length;
+    const cleared = QUEST_DEFS.filter(def => quest(def.id).status === "cleared").length;
+
+    function statusClass(status){
+      if(status === "complete") return "complete";
+      if(status === "accepted") return "accepted";
+      if(status === "cleared") return "cleared";
+      if(status === "locked") return "locked";
+      return "none";
+    }
+
+    function questAction(def, q){
+      const disabled = q.status === "locked" ? "disabled" : "";
+      if(q.status === "none") return `<button id="acceptQuest_${def.id}" class="green" ${disabled}>受注</button>`;
+      if(q.status === "accepted") return `<button disabled>進行中</button>`;
+      if(q.status === "complete") return `<button id="reportQuest_${def.id}" class="green">報告</button>`;
+      if(q.status === "cleared") return `<button id="resetQuest_${def.id}" class="blue">再受注</button>`;
+      return `<button disabled>${questLabel(q)}</button>`;
+    }
+
+    function questRow(def, index){
+      const q = quest(def.id);
+      const pct = clamp((q.progress || 0) / Math.max(1, def.target) * 100, 0, 100);
+      return `
+        <div class="quest-list-row ${statusClass(q.status)}">
+          <div class="quest-index">${String(index + 1).padStart(2,"0")}</div>
+          <div class="quest-row-main">
+            <div class="quest-row-title">
+              <b>${def.title}</b>
+              <span>${def.badge}</span>
+              <em>${questLabel(q)}</em>
+            </div>
+            <p>${def.desc}</p>
+            <div class="quest-mini-data">
+              <i>進行 ${q.progress}/${def.target}</i>
+              <i>報酬 ${rewardText(def.reward)}</i>
+            </div>
+            <div class="quest-row-progress"><b style="width:${pct}%"></b></div>
+          </div>
+          <div class="quest-row-action">${questAction(def, q)}</div>
+        </div>`;
+    }
+
     box.innerHTML = `
-      <div class="facility-row">
-        <div class="row-head"><b>次の目標</b><span class="quest-badge">${guide.def.badge}</span></div>
-        <p>${guide.def.title}：${questLabel(guide.q)}<br>${guide.def.desc}</p>
-      </div>
-      ${QUEST_DEFS.map(def => {
-        const q = quest(def.id);
-        const disabled = q.status === "locked" ? "disabled" : "";
-        let action = `<button disabled>${questLabel(q)}</button>`;
-        if(q.status === "none") action = `<button id="acceptQuest_${def.id}" class="green" ${disabled}>受注する</button>`;
-        if(q.status === "accepted") action = `<button disabled>進行中</button>`;
-        if(q.status === "complete") action = `<button id="reportQuest_${def.id}" class="green">報告して報酬を受け取る</button>`;
-        if(q.status === "cleared") action = `<button id="resetQuest_${def.id}" class="blue">再受注する</button>`;
-        return `
-          <div class="facility-row">
-            <div class="row-head"><b>${def.title}</b><span class="quest-badge">${questLabel(q)}</span></div>
-            <p>${def.desc}<br>進行：${q.progress}/${def.target}<br>報酬：${rewardText(def.reward)}</p>
-            ${action}
-          </div>`;
-      }).join("")}
-      <div class="facility-row">
-        <div class="row-head"><b>掲示板</b><span>序盤ループ</span></div>
-        <p>依頼を受けて草原へ行き、素材を拾い、鍛冶屋で装備を作る。モコホーンはLv10前後の目標です。</p>
+      <div class="quest-mmo-window">
+        <div class="quest-mini-tabs">
+          <span class="quest-mini-tab active">依頼一覧</span>
+          <span class="quest-mini-tab">進行中</span>
+          <span class="quest-mini-tab">報酬</span>
+          <span class="quest-mini-logo">Village Board</span>
+        </div>
+
+        <div class="quest-mainbox">
+          <div class="quest-page-title"><b>Quest</b><span>依頼を受けて、草原探索と育成を進めましょう。</span></div>
+
+          <div class="quest-summary-grid">
+            <div><b>ALL</b><span>${total}</span></div>
+            <div><b>NOW</b><span>${accepted}</span></div>
+            <div><b>OK</b><span>${complete}</span></div>
+            <div><b>DONE</b><span>${cleared}</span></div>
+          </div>
+
+          <div class="quest-guide-card">
+            <div class="quest-guide-head">
+              <span>次の目標</span>
+              <em>${guide.def.badge}</em>
+            </div>
+            <div class="quest-guide-title">${guide.def.title}<small>${questLabel(guide.q)}</small></div>
+            <p>${guide.def.desc}</p>
+            <div class="quest-big-progress"><i style="width:${stage.pct}%"></i></div>
+            <div class="quest-guide-action">${stage.action}</div>
+          </div>
+
+          <div class="quest-loop-card">
+            <b>育成ループ</b>
+            <span>${growthLoopSummary()}</span>
+            <small>依頼を受ける → 草原で狩る → 素材を拾う → 鍛冶屋で装備/強化 → 次の敵へ。</small>
+          </div>
+
+          <div class="quest-list-head">
+            <span>No.</span><span>依頼内容</span><span>操作</span>
+          </div>
+
+          <div class="quest-list">
+            ${QUEST_DEFS.map((def, index) => questRow(def, index)).join("")}
+          </div>
+
+          <div class="quest-board-note">
+            <b>掲示板メモ</b>
+            <span>南はぷる、中央はキノっこ、北奥はモコホーン。同時出現は最大1体なので、ザコ狩りと強敵挑戦を分けて進められます。</span>
+          </div>
+        </div>
       </div>`;
+
     setTimeout(()=>{
       for(const def of QUEST_DEFS){
         const accept = $("acceptQuest_" + def.id);
@@ -1595,6 +3311,7 @@
     },0);
   }
 
+
   function acceptQuest(id){
     const def = QUEST_MAP[id];
     if(!def) return;
@@ -1604,7 +3321,7 @@
       return;
     }
     q.status = "accepted";
-    q.progress = def.type === "item" ? Math.min(def.target, itemCount(def.targetId)) : 0;
+    q.progress = def.type === "item" ? Math.min(def.target, itemCount(def.targetId)) : def.type === "level" ? Math.min(def.target, save.level) : 0;
     if(q.progress >= def.target) q.status = "complete";
     persist();
     renderQuestBoard();
@@ -1626,10 +3343,15 @@
       const next = quest(def.next);
       if(next.status === "locked") next.status = "none";
     }
+    const caveNewlyUnlocked = syncWorldUnlocks(false);
     persist();
     renderQuestBoard();
     syncUI();
-    toast("報酬を受け取りました");
+    if(caveNewlyUnlocked && def.id === "moco_challenge"){
+      toast("報酬を受け取りました！ こけの洞窟へ行けるようになりました！");
+    }else{
+      toast("報酬を受け取りました");
+    }
   }
 
   function resetQuest(id){
@@ -1637,7 +3359,7 @@
     if(!def) return;
     const q = quest(id);
     q.status = "accepted";
-    q.progress = def.type === "item" ? Math.min(def.target, itemCount(def.targetId)) : 0;
+    q.progress = def.type === "item" ? Math.min(def.target, itemCount(def.targetId)) : def.type === "level" ? Math.min(def.target, save.level) : 0;
     if(q.progress >= def.target) q.status = "complete";
     persist();
     renderQuestBoard();
@@ -1659,6 +3381,7 @@
     burst(game.p.x, game.p.y, 14, "heal");
     toast("やくそうを使いました");
     persist();
+    syncUI();
   }
 
   function update(dt){
@@ -1719,6 +3442,8 @@
     }
 
     updateEnemies(dt);
+    if(game.map === "field" && game.drops.length) pickup(false, false);
+    maintainFieldSpawns(dt);
     updateFx(dt);
     updateCamera();
     syncUI();
@@ -1759,24 +3484,31 @@
     ];
   }
 
-  function nearestVillageObject(){
-    const p = game.p;
-    const objects = [
+  function villageObjects(){
+    return [
       {x:165,y:285,name:"道具屋",kind:"shop",message:"いらっしゃい！冒険の前にやくそうを買っていくかい？"},
       {x:460,y:260,name:"鍛冶屋",kind:"smith",message:"武器を少しだけ鍛えられるぞ。序盤の火力が上がる。"},
       {x:762,y:285,name:"転職の館",kind:"job",message:"職業の研究中だよ。v0.4でファイター・メイジ・シーフを切り替えられるようにする予定。"},
       {x:230,y:626,name:"クエスト掲示板",kind:"quest",message:"草原の依頼が貼られている。"},
       {x:712,y:626,name:"倉庫",kind:"storage",message:"手に入れた素材はバッグで確認できるよ。"},
       {x:265,y:410,name:"村人",kind:"npc",message:"ここはミニアランドのはじまりの村だよ。まずは掲示板で依頼を受けて、ひだまり草原へ行ってみよう！"},
-      {x:610,y:430,name:"案内人",kind:"npc",message:"近くの施設で「拾う」ボタンを押すと、会話や施設メニューを開けるよ。PCならEキーでもOK！"},
+      {x:610,y:430,name:"案内人",kind:"npc",message:"村では施設やNPCを直接タップするか、下の「話す」ボタンで会話や施設メニューを開けるよ。PCならEキーでもOK！"},
       {x:505,y:324,name:"守衛",kind:"npc",message:"草原にはぷるスライムやキノっこがいる。HPが減ったら座って少し休むか、やくそうを使うんだ。"}
     ];
+  }
+
+  function nearestVillageObjectTo(x, y, maxDistance=88){
     let best = null, bestD = Infinity;
-    for(const o of objects){
-      const d = Math.hypot(p.x-o.x, p.y-o.y);
-      if(d < bestD){ bestD=d; best=o; }
+    for(const o of villageObjects()){
+      const d = Math.hypot(x-o.x, y-o.y);
+      if(d < bestD){ bestD = d; best = o; }
     }
-    return bestD < 88 ? best : null;
+    return bestD < maxDistance ? best : null;
+  }
+
+  function nearestVillageObject(){
+    const p = game.p;
+    return nearestVillageObjectTo(p.x, p.y, 88);
   }
 
   function updateEnemies(dt){
@@ -1851,6 +3583,7 @@
 
   function draw(){
     if(game.map === "village") drawVillage();
+    else if(game.map === "cave") drawCave();
     else drawField();
 
     const drawables = [];
@@ -1926,10 +3659,155 @@
     ctx.restore();
   }
 
+  
+  
+  function drawFieldRouteMarks(){
+    const marks = [
+      {x:640,y:900,text:"村へ戻るなら南へ"},
+      {x:640,y:650,text:"中央狩場"},
+      {x:640,y:330,text:"ここから北は危険"}
+    ];
+    for(const m of marks){
+      const x = screenX(m.x), y = screenY(m.y);
+      if(x < -100 || x > game.w+100 || y < -80 || y > game.h+80) continue;
+      ctx.save();
+      ctx.globalAlpha=.72;
+      ctx.fillStyle="#5f3a1d";
+      ctx.fillRect(x-4,y-24,8,32);
+      ctx.fillStyle="#fff3cf";
+      ctx.strokeStyle="#6c421f";
+      ctx.lineWidth=3;
+      ctx.fillRect(x-64,y-38,128,22);
+      ctx.strokeRect(x-64,y-38,128,22);
+      ctx.fillStyle="#4b301b";
+      ctx.font="900 10px system-ui";
+      ctx.textAlign="center";
+      ctx.fillText(m.text,x,y-23);
+      ctx.restore();
+    }
+  }
+
+function drawSpawnZoneHints(){
+    // 草原の狩場ガイド。目立ちすぎないよう薄い看板表示にする。
+    const hints = [
+      {x:270,y:830,text:"入口：ぷる多め"},
+      {x:930,y:545,text:"中央：キノっこ"},
+      {x:910,y:205,text:"北奥：モコホーン"}
+    ];
+    for(const h of hints){
+      const x = screenX(h.x), y = screenY(h.y);
+      if(x < -80 || x > game.w+80 || y < -60 || y > game.h+60) continue;
+      ctx.save();
+      ctx.globalAlpha=.78;
+      ctx.fillStyle="#fff3cf";
+      ctx.strokeStyle="#6c421f";
+      ctx.lineWidth=3;
+      ctx.fillRect(x-54,y-13,108,26);
+      ctx.strokeRect(x-54,y-13,108,26);
+      ctx.globalAlpha=1;
+      ctx.fillStyle="#4b301b";
+      ctx.font="900 11px system-ui";
+      ctx.textAlign="center";
+      ctx.fillText(h.text,x,y+4);
+      ctx.restore();
+    }
+  }
+
+function drawCave(){
+    ctx.fillStyle = "#4b564b";
+    ctx.fillRect(0,0,game.w,game.h);
+
+    const startX = Math.floor(game.camX / 48) * 48;
+    const startY = Math.floor(game.camY / 48) * 48;
+    for(let y=startY; y<game.camY+game.h+48; y+=48){
+      for(let x=startX; x<game.camX+game.w+48; x+=48){
+        const sx = screenX(x), sy = screenY(y);
+        const alt = ((x/48 + y/48) & 1) ? "#5c684f" : "#515e49";
+        ctx.fillStyle = alt;
+        ctx.fillRect(sx,sy,48,48);
+        ctx.strokeStyle = "rgba(40,48,38,.18)";
+        ctx.strokeRect(sx,sy,48,48);
+        if(((x*13 + y*7) % 5) === 0){
+          ctx.fillStyle = "rgba(167,196,122,.28)";
+          ctx.beginPath();
+          ctx.ellipse(sx+18,sy+32,10,4,0,0,Math.PI*2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // main cave path
+    ctx.fillStyle = "#726858";
+    ctx.strokeStyle = "#3b3d36";
+    ctx.lineWidth = 4;
+    const path = [
+      [450, game.worldH], [450, 610], [360, 560], [390, 470], [520, 430], [620, 360], [600, 240]
+    ];
+    ctx.beginPath();
+    ctx.moveTo(screenX(path[0][0]), screenY(path[0][1]));
+    for(const [x,y] of path.slice(1)) ctx.lineTo(screenX(x), screenY(y));
+    ctx.stroke();
+    ctx.lineWidth = 34;
+    ctx.strokeStyle = "rgba(119,104,82,.88)";
+    ctx.stroke();
+
+    // cave walls and stones
+    const rocks = [[90,120],[170,210],[260,130],[760,145],[840,260],[700,590],[190,620],[870,690],[580,180],[460,300],[300,420],[650,470]];
+    for(const [x,y] of rocks) drawRock(x,y);
+
+    // glowing moss
+    const moss = [[330,520],[410,448],[552,410],[612,332],[236,574],[716,530],[148,332],[792,382]];
+    for(const [x,y] of moss){
+      const sx=screenX(x), sy=screenY(y);
+      ctx.save();
+      ctx.fillStyle = "rgba(139,218,112,.35)";
+      ctx.beginPath(); ctx.ellipse(sx,sy,22,7,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#a6ee87";
+      for(let i=0;i<5;i++){
+        ctx.beginPath(); ctx.arc(sx-16+i*8, sy-rand(0,5), 2, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // entrance sign / temporary cave guide
+    const sx = screenX(490), sy = screenY(675);
+    ctx.save();
+    ctx.fillStyle = "rgba(255,245,210,.94)";
+    ctx.strokeStyle = "#3b3d36";
+    ctx.lineWidth = 3;
+    if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(sx-112, sy-54, 224, 48, 8); ctx.fill(); ctx.stroke(); }
+    else { ctx.fillRect(sx-112, sy-54, 224, 48); ctx.strokeRect(sx-112, sy-54, 224, 48); }
+    ctx.fillStyle = "#3d352e";
+    ctx.font = "900 13px 'MS PGothic', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("こけの洞窟・入口", sx, sy-34);
+    ctx.font = "900 10px 'MS PGothic', sans-serif";
+    ctx.fillText("下の『洞』ボタンか入口タップでマップへ", sx, sy-18);
+    ctx.restore();
+
+    const ex = screenX(490), ey = screenY(730);
+    ctx.save();
+    ctx.globalAlpha = .82;
+    ctx.fillStyle = "#fff2a8";
+    ctx.strokeStyle = "#5c4b38";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, 46, 14, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#4d3a2b";
+    ctx.font = "900 11px 'MS PGothic', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("出口", ex, ey+4);
+    ctx.restore();
+  }
+
   function drawField(){
     ctx.fillStyle = "#70c55c";
     ctx.fillRect(0,0,game.w,game.h);
     drawTileGrass("#70c55c", "#62b350", "#88d674");
+
+    drawSpawnZoneHints();
+    drawFieldRouteMarks();
 
     // paths and small cliffs
     drawPath(0,590,game.worldW,95);
@@ -2400,23 +4278,28 @@
   }
 
   function drawEnemyHpBar(e, x, y){
-    const bw = 46, bh = 6;
+    const bw = 48, bh = 6;
     const rate = clamp(e.hp/e.maxHp,0,1);
-    ctx.fillStyle="#1f3145";
-    ctx.fillRect(x - bw/2, y - e.r - 30, bw, bh);
-    ctx.fillStyle= rate < .35 ? "#ff8b52" : "#e55c55";
-    ctx.fillRect(x - bw/2, y - e.r - 30, bw * rate, bh);
-    ctx.strokeStyle="#091724";
-    ctx.lineWidth=2;
-    ctx.strokeRect(x - bw/2, y - e.r - 30, bw, bh);
+    const yy = y - e.r - 30;
+    ctx.save();
+    ctx.fillStyle="rgba(19,26,52,.92)";
+    ctx.fillRect(Math.round(x - bw/2 - 2), Math.round(yy - 2), bw + 4, bh + 4);
+    ctx.fillStyle="#d8c9a5";
+    ctx.fillRect(Math.round(x - bw/2), Math.round(yy), bw, bh);
+    ctx.fillStyle= rate < .35 ? "#f06f51" : "#62d16b";
+    ctx.fillRect(Math.round(x - bw/2), Math.round(yy), Math.round(bw * rate), bh);
+    ctx.strokeStyle="#0b1633";
+    ctx.lineWidth=1;
+    ctx.strokeRect(Math.round(x - bw/2 - 2), Math.round(yy - 2), bw + 4, bh + 4);
     ctx.fillStyle="#fff8df";
-    ctx.font="900 10px system-ui";
+    ctx.font="900 10px 'MS PGothic', system-ui";
     ctx.textAlign="center";
-    ctx.strokeStyle="#000";
+    ctx.strokeStyle="#1b2348";
     ctx.lineWidth=3;
     const label = e.id === "moco_horn" ? `${e.name} Lv10推奨` : e.name;
-    ctx.strokeText(label,x,y-e.r-35);
-    ctx.fillText(label,x,y-e.r-35);
+    ctx.strokeText(label,x,yy-5);
+    ctx.fillText(label,x,yy-5);
+    ctx.restore();
   }
 
   function spriteReady(img){
@@ -2745,6 +4628,27 @@ function drawPlayer(p){
         ctx.stroke();
         ctx.fillStyle="#fff2a8";
         for(let i=20;i<f.range;i+=16){ ctx.fillRect(i,-3,8,6); }
+      }else if(f.kind === "priest"){
+        ctx.strokeStyle="#fff6c8";
+        ctx.lineWidth=6;
+        ctx.beginPath();
+        ctx.moveTo(18,0);
+        ctx.lineTo(f.range,0);
+        ctx.stroke();
+        ctx.fillStyle="#8fe8ff";
+        for(let i=34;i<f.range;i+=28){ ctx.fillRect(i,-3,8,6); }
+        ctx.fillStyle="#fff8df";
+        ctx.fillRect(f.range-7,-7,14,14);
+      }else if(f.kind === "priestHeal"){
+        ctx.rotate(-f.a);
+        ctx.strokeStyle="#fff6c8";
+        ctx.lineWidth=5;
+        ctx.beginPath();
+        ctx.arc(0,0,26 + (1-rate)*12,0,Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle="#66e080";
+        ctx.fillRect(-3,-24,6,48);
+        ctx.fillRect(-24,-3,48,6);
       }else if(f.kind === "mage"){
         ctx.strokeStyle="#e7c8ff";
         ctx.lineWidth=6;
@@ -2846,7 +4750,8 @@ function drawPlayer(p){
   function syncUI(){
     $("lvText").textContent = save.level;
     $("goldText").textContent = save.gold;
-    $("mapText").textContent = game.map === "village" ? "はじまりの村" : "ひだまり草原";
+    const menuGoldLabel = $("menuGoldLabel"); if(menuGoldLabel) menuGoldLabel.textContent = save.gold;
+    $("mapText").textContent = mapDisplayName(game.map);
     $("expText").textContent = `${save.exp}/${needExp()} あと${expToNext()}`;
     $("expFill").style.width = `${clamp(save.exp/needExp()*100,0,100)}%`;
 
@@ -2857,30 +4762,42 @@ function drawPlayer(p){
       $("hpFill").style.width = `${clamp(p.hp/p.maxHp*100,0,100)}%`;
       $("spFill").style.width = `${clamp(p.sp/p.maxSp*100,0,100)}%`;
     }
-    $("goVillageBtn").disabled = game.map === "village";
-    $("goFieldBtn").disabled = game.map === "field";
+    const interactBtn = $("interactBtn");
+    if(interactBtn){
+      const talkSmall = game.map === "village" ? "TALK" : game.map === "cave" ? "CAVE" : "AUTO";
+      const talkMain = game.map === "village" ? "話" : game.map === "cave" ? "洞" : "調";
+      interactBtn.innerHTML = `<small>${talkSmall}</small><span>${talkMain}</span>`;
+      interactBtn.title = game.map === "village" ? "近くのNPC・施設に話しかける" : game.map === "cave" ? "洞窟入口です。マップから移動できます" : "ドロップは自動取得です";
+    }
+    const sitBtn = $("sitBtn");
+    if(sitBtn){
+      sitBtn.innerHTML = `<small>${game.sit ? "STOP" : "REST"}</small><span>${game.sit ? "解" : "座"}</span>`;
+      sitBtn.classList.toggle("blue", !!game.sit);
+      sitBtn.title = game.sit ? "休憩をやめる" : "座ってHP/SPを回復する";
+    }
     const job = currentJob();
     $("charInfo").textContent = `Lv${save.level} / ${job.name} / 次Lvまであと${expToNext()}EXP / G ${save.gold}`;
     const weapon = EQUIPMENT[save.equipment?.weapon]?.name || "武器なし";
     const body = EQUIPMENT[save.equipment?.body]?.name || "胴なし";
-    $("equipInfo").textContent = `${body} / ${weapon} Lv${save.weaponLevel} / ATK ${atk()}`;
+    $("equipInfo").textContent = `${body} / ${weapon} Lv${save.weaponLevel} / ATK ${atk()} / MAT ${mat()}`;
+    const si = $("statusInfo"); if(si) si.textContent = `${statSummaryText()} / 未使用${availableStatPoints()}pt`;
+    const ti = $("testInfo"); if(ti) ti.textContent = `Lv/素材/敵出現/プリセット`;
     const ji = $("jobInfo"); if(ji) ji.textContent = `${job.type}：${job.summary} / 専用：${job.skillName || "未実装"}`;
     const jh = $("jobHud");
     if(jh){
       const cd = game.skillCooldown > 0 ? ` / 技CT ${game.skillCooldown.toFixed(1)}s` : "";
       jh.innerHTML = `職業：<span>${job.icon} ${job.name}</span> / ${job.attackName || "通常攻撃"} / 技：${job.skillName || "未実装"}${cd}`;
     }
-    const skillText = $("skillSlotText");
     const shortSkill = skillShortLabel(job);
-    const skillLabel = shortSkill === "-" ? "準備" : (game.skillCooldown > 0 ? `${shortSkill}${Math.ceil(game.skillCooldown)}` : shortSkill);
-    if(skillText) skillText.textContent = skillLabel;
 
-    const skillBtn = $("skillBtn");
-    if(skillBtn){
-      skillBtn.classList.toggle("cooling", game.skillCooldown > 0);
-      skillBtn.classList.toggle("disabled-skill", !skillReady());
-      skillBtn.title = `${job.skillName || "技"}：${skillStatusText()}`;
+    const herbRoundBtn = $("herbRoundBtn");
+    const herbRoundCount = $("herbRoundCount");
+    const herbCount = save.inventory?.herb || 0;
+    if(herbRoundBtn){
+      herbRoundBtn.classList.toggle("empty", herbCount <= 0);
+      herbRoundBtn.title = herbCount > 0 ? `やくそう：${herbCount}個` : "やくそうがありません";
     }
+    if(herbRoundCount) herbRoundCount.textContent = String(herbCount);
 
     const skillRoundBtn = $("skillRoundBtn");
     if(skillRoundBtn){
@@ -2894,33 +4811,92 @@ function drawPlayer(p){
     }
 
     const guide = currentGuideQuest();
-    $("questInfo").textContent = `${guide.def.title}：${questLabel(guide.q)}`;
+    $("questInfo").textContent = `${guide.def.title}：${questLabel(guide.q)} / ${growthLoopSummary()}`;
   }
 
-  function openBag(){
+  function openBag(filter="all"){
     const content = $("bagContent");
-    content.innerHTML = "";
-    const materialPanel = document.createElement("div");
-    materialPanel.className = "material-inventory";
-    materialPanel.innerHTML = `<b>所持素材</b><div class="material-chip-row">${materialInventoryText()}</div>`;
-    content.appendChild(materialPanel);
-    const entries = Object.entries(save.inventory).filter(([,n])=>n>0);
-    if(entries.length === 0){
-      content.innerHTML = `<div class="item-row"><b>バッグは空です</b><span>素材を拾うとここに入ります</span></div>`;
-    }else{
-      for(const [id,count] of entries){
-        const item = ITEMS[id] || {name:id,type:"不明",icon:"?"};
-        const row = document.createElement("div");
-        row.className = "item-row";
-        row.innerHTML = `<div><b>${item.icon} ${item.name}</b><br><span>${item.type}</span></div><b>×${count}</b>`;
-        content.appendChild(row);
+    const entries = Object.entries(save.inventory || {}).filter(([,n])=>n>0);
+    const filters = [
+      {id:"all", label:"すべて"},
+      {id:"material", label:"素材"},
+      {id:"rare", label:"レア素材"},
+      {id:"consume", label:"消費"}
+    ];
+    const typeOf = (id) => (ITEMS[id]?.type || "不明");
+    const filtered = entries.filter(([id])=>{
+      const type = typeOf(id);
+      if(filter === "material") return type === "素材";
+      if(filter === "rare") return type === "レア素材";
+      if(filter === "consume") return type === "消費";
+      return true;
+    });
+    const totalCount = entries.reduce((sum,[,n])=>sum+n,0);
+    const materialCount = entries.filter(([id])=>typeOf(id)==="素材").reduce((sum,[,n])=>sum+n,0);
+    const rareCount = entries.filter(([id])=>typeOf(id)==="レア素材").reduce((sum,[,n])=>sum+n,0);
+    const consumeCount = entries.filter(([id])=>typeOf(id)==="消費").reduce((sum,[,n])=>sum+n,0);
+
+    content.innerHTML = `
+      <div class="bag-window">
+        <div class="bag-tabs">
+          <span class="active">バッグ</span>
+          <span>素材</span>
+          <span>消費</span>
+        </div>
+
+        <div class="bag-summary">
+          <div><b>ALL</b><span>${totalCount}</span></div>
+          <div><b>素材</b><span>${materialCount}</span></div>
+          <div><b>レア</b><span>${rareCount}</span></div>
+          <div><b>消費</b><span>${consumeCount}</span></div>
+        </div>
+
+        <div class="bag-filter-tabs">
+          ${filters.map(f=>`<button id="bagFilter_${f.id}" class="${filter===f.id?"active":""}">${f.label}</button>`).join("")}
+        </div>
+
+        <div class="bag-list">
+          ${filtered.length ? filtered.map(([id,count])=>{
+            const item = ITEMS[id] || {name:id,type:"不明",icon:"?"};
+            const usable = id === "herb";
+            return `
+              <div class="bag-item-row ${item.type==="レア素材" ? "rare" : ""}">
+                <div class="bag-item-icon">${item.icon}</div>
+                <div class="bag-item-main">
+                  <b>${item.name}</b>
+                  <small>${item.type}</small>
+                </div>
+                <div class="bag-item-count">×${count}</div>
+                <div class="bag-item-action">
+                  ${usable ? `<button id="bagUse_${id}" class="green">使う</button>` : `<span>保管</span>`}
+                </div>
+              </div>`;
+          }).join("") : `<div class="bag-empty"><b>該当アイテムはありません</b><span>草原で素材を拾うとここに入ります。</span></div>`}
+        </div>
+
+        <div class="bag-note">
+          <b>所持素材</b>
+          <span>${materialInventoryText()}</span>
+        </div>
+
+        <div class="bag-actions">
+          <button id="bagOpenEquipBtn" class="green">装備画面を開く</button>
+          <button id="bagCloseBottomBtn">閉じる</button>
+        </div>
+      </div>`;
+
+    setTimeout(()=>{
+      for(const f of filters){
+        const btn = $("bagFilter_" + f.id);
+        if(btn) btn.onclick = () => openBag(f.id);
       }
-    }
-    const btn = document.createElement("button");
-    btn.className = "green";
-    btn.textContent = "装備画面を開く";
-    btn.onclick = openEquipmentScreen;
-    content.appendChild(btn);
+      const herbBtn = $("bagUse_herb");
+      if(herbBtn) herbBtn.onclick = () => { useHerb(); openBag(filter); };
+      const equipBtn = $("bagOpenEquipBtn");
+      if(equipBtn) equipBtn.onclick = openEquipmentScreen;
+      const closeBtn = $("bagCloseBottomBtn");
+      if(closeBtn) closeBtn.onclick = () => $("bagOverlay").classList.remove("show");
+    },0);
     $("bagOverlay").classList.add("show");
   }
 
@@ -3009,38 +4985,396 @@ function drawPlayer(p){
 
   function endStick(ev){
     if(ev.pointerId !== input.id) return;
+    ev.preventDefault();
     input.active=false;
     input.id=null;
     input.x=0;
     input.y=0;
     knob.style.transform="translate(0,0)";
+    setInputDebug({ state:"idle", tap:"-", longPress:"-", flickDist:0, flickAngle:0, result:"stick-end" });
   }
 
   stick.addEventListener("pointerdown", ev=>{
+    ev.preventDefault();
+    ev.stopPropagation();
+    if(gesture.active) resetGesture();
     input.active=true;
     input.id=ev.pointerId;
     stick.setPointerCapture(ev.pointerId);
+    setInputDebug({ state:"stick", tap:"-", longPress:"blocked", result:"stick-active" });
     moveStick(ev);
   });
   stick.addEventListener("pointermove", ev=>{
-    if(input.active && ev.pointerId === input.id) moveStick(ev);
+    if(input.active && ev.pointerId === input.id){
+      ev.preventDefault();
+      moveStick(ev);
+    }
   });
   stick.addEventListener("pointerup", endStick);
   stick.addEventListener("pointercancel", endStick);
 
-  $("attackBtn").addEventListener("pointerdown", ev=>{ ev.preventDefault(); playerAttack(); });
-  $("pickupBtn").addEventListener("pointerdown", ev=>{ ev.preventDefault(); pickup(); });
-  const skillBtn = $("skillBtn");
-  if(skillBtn) skillBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); useJobSkill(); });
+  const attackBtn = $("attackBtn");
+  if(attackBtn) attackBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); playerAttack(); });
+  const pickupBtn = $("pickupBtn");
+  if(pickupBtn) pickupBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); pickup(); });
+  const interactBtn = $("interactBtn");
+  if(interactBtn) interactBtn.addEventListener("pointerdown", ev=>{
+    ev.preventDefault();
+    if(game.map === "cave"){
+      openWorldMap();
+      toast("ワールドマップを開きました");
+    }else{
+      pickup();
+    }
+  });
+  const sitBtn = $("sitBtn");
+  if(sitBtn) sitBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); toggleSit(); });
+  const herbRoundBtn = $("herbRoundBtn");
+  if(herbRoundBtn) herbRoundBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); useHerb(); });
   const skillRoundBtn = $("skillRoundBtn");
-  if(skillRoundBtn) skillRoundBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); useJobSkill(); });
+  if(skillRoundBtn) skillRoundBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); ev.stopPropagation(); useJobSkill(); });
 
-  $("goVillageBtn").addEventListener("click", ()=>switchMap("village"));
-  $("goFieldBtn").addEventListener("click", ()=>switchMap("field"));
+  function isGameplayPointerBlocked(){
+    return !gameScreen.classList.contains("active")
+      || $("menuOverlay").classList.contains("show")
+      || $("bagOverlay").classList.contains("show")
+      || $("facilityOverlay").classList.contains("show")
+      || $("worldMapOverlay").classList.contains("show")
+      || $("dialogueBox").classList.contains("show");
+  }
+
+  function pointerScreenPos(ev){
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x:(ev.clientX - rect.left) * (canvas.style.width ? game.w / rect.width : 1),
+      y:(ev.clientY - rect.top) * (canvas.style.height ? game.h / rect.height : 1)
+    };
+  }
+
+  function pointerWorldPosFromClient(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    const sx = (clientX - rect.left) * (canvas.style.width ? game.w / rect.width : 1);
+    const sy = (clientY - rect.top) * (canvas.style.height ? game.h / rect.height : 1);
+    return {
+      x: sx + game.camX - (game.shakeX || 0),
+      y: sy + game.camY - (game.shakeY || 0)
+    };
+  }
+
+  function pointerWorldPos(ev){
+    return pointerWorldPosFromClient(ev.clientX, ev.clientY);
+  }
+
+  function setInputDebug(patch){
+    Object.assign(inputDebug, patch || {});
+    const note = $("debugNote");
+    if(!note) return;
+    note.textContent = [
+      `input:${inputDebug.state}`,
+      `tap:${inputDebug.tap}`,
+      `long:${inputDebug.longPress}`,
+      `dist:${Math.round(inputDebug.flickDist || 0)}`,
+      `angle:${Math.round(inputDebug.flickAngle || 0)}deg`,
+      `result:${inputDebug.result}`
+    ].join(" / ");
+  }
+
+  function toggleInputDebug(){
+    inputDebug.visible = !inputDebug.visible;
+    gameScreen.classList.toggle("input-debug-show", inputDebug.visible);
+    setInputDebug({ state:inputDebug.visible ? "debug-on" : "debug-off" });
+    toast(inputDebug.visible ? "INPUT HUD ON" : "INPUT HUD OFF");
+  }
+
+  function enemyAtWorldPoint(x, y){
+    let best = null;
+    let bestD = Infinity;
+    for(const e of game.enemies){
+      const d = Math.hypot(x - e.x, y - e.y);
+      if(d < e.r + 18 && d < bestD){
+        best = e;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  function canBeginSkillAim(){
+    if(!gesture.active) return false;
+    if(!(game.map === "field" || game.map === "cave")) return false;
+    if(input.active) return false;
+    if(gesture.startEnemy) return false;
+    if(gesture.startVillageObject) return false;
+    if(!hasJobSkill(currentJob())) return false;
+    return true;
+  }
+
+  function showSkillAimOverlay(){
+    const overlay = $("skillAimOverlay");
+    if(!overlay || !game.p) return;
+    overlay.classList.add("show");
+    overlay.classList.toggle("not-ready", !skillReady());
+    const sx = screenX(game.p.x);
+    const sy = screenY(game.p.y - 8);
+    overlay.style.transform = `translate3d(${sx}px,${sy}px,0)`;
+    updateSkillAimOverlay();
+  }
+
+  function updateSkillAimOverlay(){
+    const overlay = $("skillAimOverlay");
+    if(!overlay || !gesture.aiming) return;
+    const dx = gesture.currentX - gesture.startX;
+    const dy = gesture.currentY - gesture.startY;
+    const dist = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    const readyDistance = dist >= GESTURE_FLICK_MIN;
+    const arrow = overlay.querySelector(".skill-aim-arrow");
+    const label = overlay.querySelector(".skill-aim-label");
+    const scale = clamp(dist / 64, .55, 1.42);
+    overlay.classList.toggle("ready", readyDistance && skillReady());
+    overlay.classList.toggle("cancel", !readyDistance);
+    if(arrow){
+      arrow.style.transform = `rotate(${angle}rad) scaleX(${scale})`;
+    }
+    if(label){
+      const job = currentJob();
+      if(!hasJobSkill(job)) label.textContent = "スキル準備中";
+      else if(!skillReady()) label.textContent = skillStatusText();
+      else label.textContent = dist >= GESTURE_FLICK_MIN ? `${job.skillName || "スキル"} 発動` : "方向へフリック";
+    }
+    if(label && skillReady()) label.textContent = readyDistance ? "READY" : "CANCEL";
+    setInputDebug({
+      state:"aiming",
+      longPress:"aim",
+      flickDist:dist,
+      flickAngle:angle * 180 / Math.PI,
+      result:readyDistance ? "ready" : "cancel-zone"
+    });
+  }
+
+  function hideSkillAimOverlay(){
+    const overlay = $("skillAimOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("show", "not-ready", "ready", "cancel");
+    overlay.style.transform = "translate3d(-999px,-999px,0)";
+  }
+
+  function clearGestureTimer(){
+    if(gesture.timer){
+      clearTimeout(gesture.timer);
+      gesture.timer = null;
+    }
+  }
+
+  function resetGesture(){
+    clearGestureTimer();
+    gesture.active = false;
+    gesture.aiming = false;
+    gesture.pointerId = null;
+    gesture.startWorld = null;
+    gesture.startEnemy = null;
+    gesture.startVillageObject = null;
+    gesture.tapCanceled = false;
+    gesture.blockedReason = "";
+    hideSkillAimOverlay();
+  }
+
+  function beginGestureAim(){
+    if(!gesture.active || gesture.aiming) return;
+    if(!canBeginSkillAim()){
+      clearGestureTimer();
+      setInputDebug({
+        state:"blocked",
+        longPress:"blocked",
+        result:gesture.blockedReason || "blocked"
+      });
+      return;
+    }
+    gesture.aiming = true;
+    game.sit = false;
+    setInputDebug({ state:"aiming", longPress:"start", result:"aim-start" });
+    showSkillAimOverlay();
+  }
+
+  function finishGestureAim(){
+    const dx = gesture.currentX - gesture.startX;
+    const dy = gesture.currentY - gesture.startY;
+    const dist = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    if(dist < GESTURE_FLICK_MIN){
+      gesture.lastResult = "cancel";
+      setInputDebug({
+        state:"ended",
+        longPress:"released",
+        flickDist:dist,
+        flickAngle:angle * 180 / Math.PI,
+        result:"skill-cancel"
+      });
+      toast("スキルをキャンセルしました");
+      return;
+    }
+    if(!game.p) return;
+    gesture.lastResult = skillReady() ? "skill" : "not-ready";
+    setInputDebug({
+      state:"ended",
+      longPress:"released",
+      flickDist:dist,
+      flickAngle:angle * 180 / Math.PI,
+      result:gesture.lastResult
+    });
+    useJobSkill(angle);
+  }
+
+  function handleCanvasTap(worldPos){
+    if(game.map === "field"){
+      const enemy = enemyAtWorldPoint(worldPos.x, worldPos.y);
+      if(enemy){
+        playerAttack(enemy);
+      }
+      return;
+    }
+    if(game.map === "village"){
+      const obj = nearestVillageObjectTo(worldPos.x, worldPos.y, 64);
+      if(obj){
+        handleVillageInteraction(obj);
+      }
+      return;
+    }
+    if(game.map === "cave"){
+      if(Math.hypot(worldPos.x - 490, worldPos.y - 700) < 96){
+        openWorldMap();
+        toast("ワールドマップを開きました");
+      }
+    }
+  }
+
+  canvas.addEventListener("pointerdown", ev=>{
+    if(isGameplayPointerBlocked()) return;
+    if(ev.pointerType === "mouse" && ev.button !== 0) return;
+    ev.preventDefault();
+    resetGesture();
+
+    const screen = pointerScreenPos(ev);
+    const world = pointerWorldPos(ev);
+    gesture.active = true;
+    gesture.aiming = false;
+    gesture.pointerId = ev.pointerId;
+    gesture.startX = screen.x;
+    gesture.startY = screen.y;
+    gesture.currentX = screen.x;
+    gesture.currentY = screen.y;
+    gesture.startWorld = world;
+    gesture.startEnemy = game.map === "field" ? enemyAtWorldPoint(world.x, world.y) : null;
+    gesture.startVillageObject = game.map === "village" ? nearestVillageObjectTo(world.x, world.y, 64) : null;
+    gesture.tapCanceled = false;
+    gesture.blockedReason = gesture.startEnemy ? "enemy-tap"
+      : input.active ? "stick-active"
+      : gesture.startVillageObject ? "village-object"
+      : !(game.map === "field" || game.map === "cave") ? "non-combat-map"
+      : "";
+    setInputDebug({
+      state:"down",
+      tap:gesture.startEnemy ? "enemy" : "canvas",
+      longPress:gesture.blockedReason ? "blocked" : "pending",
+      flickDist:0,
+      flickAngle:0,
+      result:gesture.blockedReason || "waiting"
+    });
+
+    try{ canvas.setPointerCapture(ev.pointerId); }catch(_){}
+
+    if(!gesture.blockedReason){
+      gesture.timer = setTimeout(()=>{
+        beginGestureAim();
+      }, GESTURE_LONG_PRESS_MS);
+    }
+  });
+
+  canvas.addEventListener("pointermove", ev=>{
+    if(!gesture.active || gesture.pointerId !== ev.pointerId) return;
+    ev.preventDefault();
+    const screen = pointerScreenPos(ev);
+    gesture.currentX = screen.x;
+    gesture.currentY = screen.y;
+    const dx = gesture.currentX - gesture.startX;
+    const dy = gesture.currentY - gesture.startY;
+    const dist = Math.hypot(dx, dy);
+    if(!gesture.aiming && dist > GESTURE_TAP_SLOP){
+      gesture.tapCanceled = true;
+      clearGestureTimer();
+      setInputDebug({
+        state:"moving",
+        tap:"drag",
+        longPress:"cancelled",
+        flickDist:dist,
+        flickAngle:Math.atan2(dy, dx) * 180 / Math.PI,
+        result:"tap-cancel"
+      });
+    }
+    if(gesture.aiming){
+      showSkillAimOverlay();
+      updateSkillAimOverlay();
+    }
+  });
+
+  function endCanvasGesture(ev){
+    if(!gesture.active || gesture.pointerId !== ev.pointerId) return;
+    ev.preventDefault();
+    clearGestureTimer();
+    try{ canvas.releasePointerCapture(ev.pointerId); }catch(_){}
+
+    const wasAiming = gesture.aiming;
+    const world = pointerWorldPos(ev);
+
+    if(wasAiming){
+      finishGestureAim();
+      resetGesture();
+      return;
+    }
+
+    if(gesture.tapCanceled){
+      setInputDebug({ state:"ended", tap:"cancelled", longPress:"no", result:"tap-cancel" });
+      resetGesture();
+      return;
+    }
+
+    setInputDebug({ state:"ended", tap:gesture.startEnemy ? "enemy-attack" : "tap", longPress:"no", result:"tap" });
+    resetGesture();
+    handleCanvasTap(world);
+  }
+
+  canvas.addEventListener("pointerup", endCanvasGesture);
+  canvas.addEventListener("pointercancel", ev=>{
+    if(gesture.active && gesture.pointerId === ev.pointerId){
+      setInputDebug({ state:"cancelled", tap:"-", longPress:"cancelled", result:"pointercancel" });
+      resetGesture();
+    }
+  });
+  canvas.addEventListener("contextmenu", ev=>ev.preventDefault());
+
   $("bagBtn").addEventListener("click", openBag);
   $("menuBtn").addEventListener("click", openMenu);
+  const mapBtn = $("mapBtn");
+  if(mapBtn) mapBtn.addEventListener("click", openWorldMap);
+  document.querySelectorAll(".world-node").forEach(node => {
+    node.addEventListener("click", ()=>{
+      const areaId = node.dataset.areaId || node.dataset.mapTarget;
+      if(areaId){ selectWorldMapArea(areaId); return; }
+      toast("このエリアはまだ開放されていません");
+    });
+  });
+  const openStatusBtn = $("openStatusBtn");
+  if(openStatusBtn) openStatusBtn.addEventListener("click", openStatusScreen);
+  const openTestBtn = $("openTestBtn");
+  if(openTestBtn) openTestBtn.addEventListener("click", openTestPanel);
   const openEquipBtn = $("openEquipBtn");
   if(openEquipBtn) openEquipBtn.addEventListener("click", openEquipmentScreen);
+  const menuOpenBagBtn = $("menuOpenBagBtn");
+  if(menuOpenBagBtn) menuOpenBagBtn.addEventListener("click", ()=>{ $("menuOverlay").classList.remove("show"); openBag(); });
+  const menuOpenJobBtn = $("menuOpenJobBtn");
+  if(menuOpenJobBtn) menuOpenJobBtn.addEventListener("click", ()=>{ $("menuOverlay").classList.remove("show"); renderJobHall(); $("facilityOverlay").classList.add("show"); });
+  const menuOpenQuestBtn = $("menuOpenQuestBtn");
+  if(menuOpenQuestBtn) menuOpenQuestBtn.addEventListener("click", ()=>{ $("menuOverlay").classList.remove("show"); $("facilityTitle").textContent = "クエスト掲示板"; renderQuestBoard(); $("facilityOverlay").classList.add("show"); });
   $("chatBtn").addEventListener("click", ()=>toast("チャットは飾りUIです。今後実装予定。"));
 
   document.querySelectorAll("[data-close]").forEach(btn=>{
@@ -3087,6 +5421,7 @@ function drawPlayer(p){
     if(k==="o") openEquipmentScreen();
     if(k==="1") useHerb();
     if(k==="2") useJobSkill();
+    if(k==="i") toggleInputDebug();
     if(k===" "){
       ev.preventDefault();
     }
@@ -3155,6 +5490,7 @@ function drawPlayer(p){
     const godBtn = mk("🛡 無敵：OFF", (b)=>{ game.god = !game.god; b.textContent = "🛡 無敵："+(game.god?"ON":"OFF"); b.style.background = game.god? "#1e6b4a":"#39563f"; toast("無敵"+(game.god?"ON":"OFF")); });
     mk("👹 モコホーン召喚", ()=>devSpawnMoco(), "#6b2a2a");
     mk("🗑 セーブ初期化", ()=>confirmReset(), "#6b2222");
+    mk("INPUT HUD ON/OFF", ()=>toggleInputDebug(), "#2f4f6f");
     btn.addEventListener("click", ()=>{ panel.style.display = panel.style.display==="none" ? "flex" : "none"; });
     screen.appendChild(btn);
     screen.appendChild(panel);
