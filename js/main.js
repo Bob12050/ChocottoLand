@@ -624,6 +624,7 @@
     startEnemy:null,
     startVillageObject:null,
     tapCanceled:false,
+    source:"",
     blockedReason:"",
     lastResult:"idle"
   };
@@ -4983,35 +4984,123 @@ function drawPlayer(p){
     if(Math.hypot(input.x,input.y) > .15) game.sit = false;
   }
 
+  function updateStickAimFromPointer(ev){
+    const screen = pointerScreenPosFromClient(ev.clientX, ev.clientY);
+    gesture.currentX = screen.x;
+    gesture.currentY = screen.y;
+    const dx = gesture.currentX - gesture.startX;
+    const dy = gesture.currentY - gesture.startY;
+    const dist = Math.hypot(dx, dy);
+    const max = 38;
+    const m = Math.max(1, dist);
+    const kx = dx / m * Math.min(max, dist);
+    const ky = dy / m * Math.min(max, dist);
+    input.x = 0;
+    input.y = 0;
+    knob.style.transform = `translate(${kx}px,${ky}px)`;
+    showSkillAimOverlay();
+    updateSkillAimOverlay();
+  }
+
+  function beginStickGesture(ev){
+    const screen = pointerScreenPosFromClient(ev.clientX, ev.clientY);
+    gesture.active = true;
+    gesture.aiming = false;
+    gesture.pointerId = ev.pointerId;
+    gesture.source = "stick";
+    gesture.startX = screen.x;
+    gesture.startY = screen.y;
+    gesture.currentX = screen.x;
+    gesture.currentY = screen.y;
+    gesture.startWorld = null;
+    gesture.startEnemy = null;
+    gesture.startVillageObject = null;
+    gesture.tapCanceled = false;
+    gesture.blockedReason = !(game.map === "field" || game.map === "cave") ? "non-combat-map"
+      : !hasJobSkill(currentJob()) ? "no-skill"
+      : "";
+    setInputDebug({
+      state:"punicon",
+      tap:"stick",
+      longPress:gesture.blockedReason ? "blocked" : "pending",
+      flickDist:0,
+      flickAngle:0,
+      result:gesture.blockedReason || "hold"
+    });
+    if(!gesture.blockedReason){
+      if(stick) stick.classList.add("holding");
+      gesture.timer = setTimeout(()=>{
+        beginGestureAim();
+      }, GESTURE_LONG_PRESS_MS);
+    }
+  }
+
   function endStick(ev){
     if(ev.pointerId !== input.id) return;
     ev.preventDefault();
+    const wasAiming = gesture.active && gesture.pointerId === ev.pointerId && gesture.source === "stick" && gesture.aiming;
+    if(wasAiming){
+      updateStickAimFromPointer(ev);
+      finishGestureAim();
+      resetGesture();
+    }else if(gesture.active && gesture.pointerId === ev.pointerId && gesture.source === "stick"){
+      resetGesture();
+    }
     input.active=false;
     input.id=null;
     input.x=0;
     input.y=0;
     knob.style.transform="translate(0,0)";
-    setInputDebug({ state:"idle", tap:"-", longPress:"-", flickDist:0, flickAngle:0, result:"stick-end" });
+    if(!wasAiming) setInputDebug({ state:"idle", tap:"-", longPress:"-", flickDist:0, flickAngle:0, result:"stick-end" });
+  }
+
+  function cancelStick(ev){
+    if(ev.pointerId !== input.id) return;
+    ev.preventDefault();
+    if(gesture.active && gesture.pointerId === ev.pointerId && gesture.source === "stick"){
+      setInputDebug({ state:"cancelled", tap:"stick", longPress:"cancelled", result:"punicon-cancel" });
+      resetGesture();
+    }
+    input.active=false;
+    input.id=null;
+    input.x=0;
+    input.y=0;
+    knob.style.transform="translate(0,0)";
   }
 
   stick.addEventListener("pointerdown", ev=>{
+    if(isGameplayPointerBlocked()) return;
     ev.preventDefault();
     ev.stopPropagation();
     if(gesture.active) resetGesture();
     input.active=true;
     input.id=ev.pointerId;
     stick.setPointerCapture(ev.pointerId);
-    setInputDebug({ state:"stick", tap:"-", longPress:"blocked", result:"stick-active" });
+    beginStickGesture(ev);
     moveStick(ev);
   });
   stick.addEventListener("pointermove", ev=>{
     if(input.active && ev.pointerId === input.id){
       ev.preventDefault();
-      moveStick(ev);
+      if(gesture.active && gesture.pointerId === ev.pointerId && gesture.source === "stick" && gesture.aiming){
+        updateStickAimFromPointer(ev);
+      }else{
+        moveStick(ev);
+        if(gesture.active && gesture.pointerId === ev.pointerId && gesture.source === "stick"){
+          const screen = pointerScreenPosFromClient(ev.clientX, ev.clientY);
+          const moved = Math.hypot(screen.x - gesture.startX, screen.y - gesture.startY);
+          if(moved > 26){
+            clearGestureTimer();
+            if(stick) stick.classList.remove("holding");
+            gesture.blockedReason = "move";
+            setInputDebug({ state:"stick-move", tap:"stick", longPress:"cancelled", flickDist:moved, result:"move" });
+          }
+        }
+      }
     }
   });
   stick.addEventListener("pointerup", endStick);
-  stick.addEventListener("pointercancel", endStick);
+  stick.addEventListener("pointercancel", cancelStick);
 
   const attackBtn = $("attackBtn");
   if(attackBtn) attackBtn.addEventListener("pointerdown", ev=>{ ev.preventDefault(); playerAttack(); });
@@ -5048,6 +5137,14 @@ function drawPlayer(p){
     return {
       x:(ev.clientX - rect.left) * (canvas.style.width ? game.w / rect.width : 1),
       y:(ev.clientY - rect.top) * (canvas.style.height ? game.h / rect.height : 1)
+    };
+  }
+
+  function pointerScreenPosFromClient(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x:(clientX - rect.left) * (canvas.style.width ? game.w / rect.width : 1),
+      y:(clientY - rect.top) * (canvas.style.height ? game.h / rect.height : 1)
     };
   }
 
@@ -5101,10 +5198,8 @@ function drawPlayer(p){
 
   function canBeginSkillAim(){
     if(!gesture.active) return false;
+    if(gesture.source !== "stick") return false;
     if(!(game.map === "field" || game.map === "cave")) return false;
-    if(input.active) return false;
-    if(gesture.startEnemy) return false;
-    if(gesture.startVillageObject) return false;
     if(!hasJobSkill(currentJob())) return false;
     return true;
   }
@@ -5175,7 +5270,9 @@ function drawPlayer(p){
     gesture.startEnemy = null;
     gesture.startVillageObject = null;
     gesture.tapCanceled = false;
+    gesture.source = "";
     gesture.blockedReason = "";
+    if(stick) stick.classList.remove("holding", "aiming");
     hideSkillAimOverlay();
   }
 
@@ -5192,6 +5289,12 @@ function drawPlayer(p){
     }
     gesture.aiming = true;
     game.sit = false;
+    if(gesture.source === "stick"){
+      input.x = 0;
+      input.y = 0;
+      if(stick) stick.classList.add("aiming");
+      knob.style.transform = "translate(0,0)";
+    }
     setInputDebug({ state:"aiming", longPress:"start", result:"aim-start" });
     showSkillAimOverlay();
   }
@@ -5259,6 +5362,7 @@ function drawPlayer(p){
     gesture.active = true;
     gesture.aiming = false;
     gesture.pointerId = ev.pointerId;
+    gesture.source = "canvas";
     gesture.startX = screen.x;
     gesture.startY = screen.y;
     gesture.currentX = screen.x;
@@ -5283,11 +5387,7 @@ function drawPlayer(p){
 
     try{ canvas.setPointerCapture(ev.pointerId); }catch(_){}
 
-    if(!gesture.blockedReason){
-      gesture.timer = setTimeout(()=>{
-        beginGestureAim();
-      }, GESTURE_LONG_PRESS_MS);
-    }
+    clearGestureTimer();
   });
 
   canvas.addEventListener("pointermove", ev=>{

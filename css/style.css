@@ -6471,3 +6471,29 @@
     min-height:43px;
   }
 }
+
+
+/* v0.6.15.25 punicon hold-flick skill control */
+.stick.holding .stick-base{
+  border-color:rgba(166,225,255,.82);
+  background:rgba(55,95,130,.26);
+  box-shadow:0 0 12px rgba(129,216,255,.46),inset 0 0 14px rgba(255,255,255,.22);
+}
+.stick.holding .stick-knob{
+  background:linear-gradient(#eaf9ff,#9fd7f2);
+  border-color:#315f95;
+  box-shadow:0 0 10px rgba(129,216,255,.65),0 5px 0 rgba(0,0,0,.22);
+}
+.stick.aiming .stick-base{
+  border-color:rgba(255,242,168,.92);
+  background:rgba(63,78,132,.34);
+  box-shadow:0 0 18px rgba(255,218,76,.58),inset 0 0 18px rgba(255,255,255,.24);
+}
+.stick.aiming .stick-knob{
+  background:linear-gradient(#fff8c8,#f0b85b);
+  border-color:#704015;
+  box-shadow:0 0 14px rgba(255,210,74,.78),0 5px 0 rgba(0,0,0,.22);
+}
+.slot-btn.skill-slot::before{
+  content:"技";
+}
