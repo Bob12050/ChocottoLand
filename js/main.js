@@ -2314,13 +2314,15 @@
       return;
     }
     if(job.cost) p.sp = Math.max(0, p.sp - job.cost);
-    game.attackCooldown = attackCooldown(job);
-    p.attackTimer = .18;
-    p.attackAnimMax = p.attackTimer;
-    const range = job.range;
-    game.attackFx.push({kind:job.id,x:p.x,y:p.y,a:p.face,life:.18,max:.18,range});
-    let hit = false;
     const isMagicBasic = job.id === "mage" || job.id === "priest";
+    const swordAnim = canUseSwordAttackSprite(save.equipment?.weapon) && !isMagicBasic;
+    game.attackCooldown = attackCooldown(job);
+    p.attackTimer = swordAnim ? .24 : .18;
+    p.attackAnimMax = p.attackTimer;
+    p.attackSpriteType = swordAnim ? "basic" : "";
+    const range = job.range;
+    if(!swordAnim) game.attackFx.push({kind:job.id,x:p.x,y:p.y,a:p.face,life:.18,max:.18,range});
+    let hit = false;
     const arc = isMagicBasic ? Math.PI*.25 : Math.PI*.55;
     for(const e of [...game.enemies]){
       if(targetEnemy && e !== targetEnemy) continue;
@@ -2376,6 +2378,7 @@
     game.attackCooldown = Math.max(game.attackCooldown, .18);
     p.attackTimer = .24;
     p.attackAnimMax = p.attackTimer;
+    p.attackSpriteType = "";
 
     const range = 82;
     const arc = Math.PI * .76;
@@ -2432,6 +2435,7 @@
     game.attackCooldown = Math.max(game.attackCooldown, .20);
     p.attackTimer = .22;
     p.attackAnimMax = p.attackTimer;
+    p.attackSpriteType = "";
 
     const range = 210;
     const arc = Math.PI * .20;
@@ -2500,6 +2504,7 @@
     game.attackCooldown = Math.max(game.attackCooldown, .18);
     p.attackTimer = .18;
     p.attackAnimMax = p.attackTimer;
+    p.attackSpriteType = "";
 
     const before = p.hp;
     const heal = priestHealAmount();
@@ -4558,10 +4563,10 @@ function drawCave(){
   }
 
   function playerAttackSpriteInfo(p, weaponId){
-    if(!p || p.attackTimer <= 0 || !canUseSwordAttackSprite(weaponId)) return null;
+    if(!p || p.attackTimer <= 0 || p.attackSpriteType !== "basic" || !canUseSwordAttackSprite(weaponId)) return null;
     const max = Math.max(.08, p.attackAnimMax || .18);
     const progress = clamp(1 - p.attackTimer / max, 0, .999);
-    const frame = Math.min(3, Math.floor(progress * 4));
+    const frame = progress < .30 ? 0 : progress < .68 ? 2 : 3;
     const suffix = ["A","B","C","D"][frame];
     const a = Number.isFinite(p.face) ? p.face : 0;
     const dx = Math.cos(a);
@@ -4696,9 +4701,9 @@ function drawPlayer(p){
     if(spriteReady(baseImg)){
       try{
         ctx.save();
-        ctx.translate(Math.round(drawX), Math.round(drawY + (usingAttackSprite ? -4 : 0)));
+        ctx.translate(Math.round(drawX), Math.round(drawY + (usingAttackSprite ? -2 : 0)));
         const spriteScale = usingAttackSprite ? (attackSprite.flip ? -1 : 1) : (isSide ? sign : 1);
-        const spriteSize = usingAttackSprite ? 76 : 54;
+        const spriteSize = usingAttackSprite ? 68 : 54;
         if(spriteScale !== 1) ctx.scale(spriteScale, 1);
         ctx.drawImage(baseImg, -spriteSize/2, -spriteSize/2, spriteSize, spriteSize);
         ctx.restore();
