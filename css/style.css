@@ -6411,3 +6411,63 @@
   #bagOverlay .wood-panel{max-width:246px;}
   #bagOverlay .bag-list{grid-template-columns:repeat(4,minmax(0,1fr));max-height:250px;}
 }
+
+
+/* v0.6.15.24.1 smartphone title command tap fix */
+#titleScreen .title-cloud,
+#titleScreen .title-tree,
+#titleScreen .title-ground,
+#titleScreen::before{
+  pointer-events:none;
+}
+#titleScreen .title-shell,
+#titleScreen .title-panel,
+#titleScreen .title-main-window,
+#titleScreen .title-buttons,
+#titleScreen .title-command{
+  pointer-events:auto;
+}
+#titleScreen .title-shell{
+  z-index:12;
+}
+#titleScreen .title-panel{
+  overflow:hidden;
+}
+#titleScreen .title-main-window{
+  overflow:hidden;
+}
+#titleScreen .title-buttons{
+  position:relative;
+  z-index:20;
+  min-height:95px;
+  align-self:end;
+}
+#titleScreen .title-command{
+  position:relative;
+  z-index:21;
+  touch-action:manipulation;
+  -webkit-touch-callout:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+@media (max-height:680px){
+  #titleScreen.heisei-title-screen .title-panel{
+    grid-template-rows:minmax(0,1fr) auto;
+  }
+  #titleScreen.heisei-title-screen .title-news-window{
+    display:none;
+  }
+  #titleScreen.heisei-title-screen .title-main-window{
+    grid-template-rows:auto auto minmax(66px,.75fr) auto auto;
+    gap:4px;
+  }
+  #titleScreen.heisei-title-screen .title-buttons{
+    min-height:88px;
+  }
+  #titleScreen.heisei-title-screen .title-buttons .title-command{
+    min-height:39px;
+  }
+  #titleScreen.heisei-title-screen .title-buttons .title-command:first-child{
+    min-height:43px;
+  }
+}

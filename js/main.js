@@ -5407,9 +5407,26 @@ function drawPlayer(p){
     }
   }
   $("menuResetBtn").addEventListener("click", confirmReset);
-  $("titleResetBtn").addEventListener("click", confirmReset);
-  $("newGameBtn").addEventListener("click", ()=>startGame(true));
-  $("continueBtn").addEventListener("click", ()=>startGame(false));
+  function bindTitleCommand(id, fn){
+    const btn = $(id);
+    if(!btn) return;
+    let handledAt = -Infinity;
+    const run = (ev)=>{
+      if(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      const now = performance.now();
+      if(now - handledAt < 350) return;
+      handledAt = now;
+      fn(ev);
+    };
+    btn.addEventListener("pointerup", run);
+    btn.addEventListener("click", run);
+  }
+  bindTitleCommand("titleResetBtn", confirmReset);
+  bindTitleCommand("newGameBtn", ()=>startGame(true));
+  bindTitleCommand("continueBtn", ()=>startGame(false));
 
   window.addEventListener("keydown", ev=>{
     const k = ev.key.toLowerCase();
