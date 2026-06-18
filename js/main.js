@@ -1251,7 +1251,7 @@
                   ${slotCols[0].map(slotCard).join("")}
                 </div>
                 <div class="status-character-panel">
-                  <div class="status-character-frame"><img src="assets/characters/player_front.png" alt="player" /></div>
+                  <div class="status-character-frame"><img src="assets/characters/player_default_pose.png" alt="player" /></div>
                   <div class="status-character-name">${job.name}<small>Lv ${save.level} / ${job.type}</small></div>
                   <div class="status-mini-actions-row">
                     <button id="openEquipFromStatusBtn" class="green">装備</button>
@@ -1838,6 +1838,7 @@
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.imageSmoothingEnabled = false;
     game.w = w;
     game.h = h;
     game.dpr = dpr;
@@ -1852,6 +1853,7 @@
     titleCanvas.style.width = box.width + "px";
     titleCanvas.style.height = box.height + "px";
     tctx.setTransform(dpr,0,0,dpr,0,0);
+    tctx.imageSmoothingEnabled = false;
     drawTitleCharacters(box.width, box.height);
   }
 

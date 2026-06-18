@@ -6649,3 +6649,10 @@
     right:55px;
   }
 }
+
+
+/* v0.6.15.29 keep character sprites crisp and slightly pixel-art */
+#gameCanvas,
+#titleCanvas{
+  image-rendering:pixelated;
+}
