@@ -3609,6 +3609,10 @@
     ctx.fillStyle = "#75cc63";
     ctx.fillRect(0,0,game.w,game.h);
     drawTileGrass("#75cc63", "#68b956", "#8cda74");
+    drawSoftGrassPatches([
+      [72,120,150,58,"#91dc73"],[272,174,116,50,"#8bd36e"],[626,112,168,58,"#8fd874"],
+      [92,612,166,64,"#88d168"],[506,585,148,52,"#92dc77"],[746,606,138,58,"#86cd67"]
+    ]);
 
     // paths
     drawPath(440,0,104,game.worldH);
@@ -3633,6 +3637,8 @@
     drawFenceLine(705,332,190);
     drawFlowerBed(285,292);
     drawFlowerBed(610,296);
+    [[92,325],[246,536],[382,304],[742,334],[790,538],[518,548]].forEach(([x,y])=>drawTinyFlowers(x,y));
+    [[238,335],[732,368],[716,598]].forEach(([x,y])=>drawBarrelStack(x,y));
     drawNPC(265,410,"村人");
     drawNPC(610,430,"案内人");
     drawNPC(505,324,"守衛");
@@ -3806,6 +3812,10 @@ function drawCave(){
     ctx.fillStyle = "#70c55c";
     ctx.fillRect(0,0,game.w,game.h);
     drawTileGrass("#70c55c", "#62b350", "#88d674");
+    drawSoftGrassPatches([
+      [120,220,170,78,"#83d36a"],[380,275,210,72,"#8bd76f"],[760,230,180,78,"#7cca63"],
+      [82,760,215,82,"#86d66c"],[690,725,230,88,"#80ce66"],[898,432,170,70,"#8ad56d"]
+    ]);
 
     drawSpawnZoneHints();
     drawFieldRouteMarks();
@@ -3818,6 +3828,8 @@ function drawCave(){
     // trees / rocks / flowers
     drawFlowerBed(258,548);
     drawFlowerBed(735,545);
+    [[165,515],[342,704],[482,518],[832,515],[925,702],[986,302]].forEach(([x,y])=>drawTinyFlowers(x,y));
+    [[216,285],[905,262],[1020,486],[356,814]].forEach(([x,y])=>drawMushroomClump(x,y));
     drawFenceLine(120,720,230);
     drawFenceLine(730,720,230);
     const props = [];
@@ -3848,20 +3860,120 @@ function drawCave(){
           ctx.fillStyle = light;
           ctx.fillRect(sx+9, sy+14, 5, 3);
           ctx.fillRect(sx+15, sy+11, 4, 3);
+          ctx.fillStyle = "rgba(255,255,210,.14)";
+          ctx.fillRect(sx+2, sy+2, 30, 1);
         }else if(n === 1){
           ctx.fillStyle = dark;
           ctx.fillRect(sx+21, sy+19, 4, 3);
           ctx.fillRect(sx+25, sy+16, 3, 3);
+        }else if(n === 2){
+          ctx.fillStyle = "rgba(255,246,190,.16)";
+          ctx.fillRect(sx+12, sy+25, 2, 2);
+          ctx.fillRect(sx+18, sy+24, 2, 2);
         }
       }
     }
   }
 
+  function drawSoftGrassPatches(patches){
+    for(const [x,y,w,h,color] of patches){
+      const sx = screenX(x), sy = screenY(y);
+      if(sx + w < -60 || sx > game.w+60 || sy + h < -60 || sy > game.h+60) continue;
+      ctx.save();
+      ctx.globalAlpha = .52;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(sx+w*.5, sy+h*.5, w*.5, h*.5, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = .26;
+      ctx.fillStyle = "#fff7ad";
+      ctx.beginPath();
+      ctx.ellipse(sx+w*.34, sy+h*.34, w*.18, h*.14, -0.4, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawTinyFlowers(x,y){
+    const sx=screenX(x), sy=screenY(y);
+    if(sx < -40 || sx > game.w+40 || sy < -40 || sy > game.h+40) return;
+    const colors = ["#fff088","#ff9fbd","#9fe9ff","#f6b165"];
+    ctx.save();
+    ctx.translate(sx,sy);
+    for(let i=0;i<7;i++){
+      const px = -18 + i*6;
+      const py = (i%3)*5;
+      ctx.fillStyle = "#3e9440";
+      ctx.fillRect(px+1, py+4, 2, 6);
+      ctx.fillStyle = colors[i%colors.length];
+      ctx.fillRect(px, py, 4, 4);
+      ctx.fillStyle = "rgba(255,255,255,.45)";
+      ctx.fillRect(px+1, py, 1, 1);
+    }
+    ctx.restore();
+  }
+
+  function drawMushroomClump(x,y){
+    const sx=screenX(x), sy=screenY(y);
+    if(sx < -45 || sx > game.w+45 || sy < -45 || sy > game.h+45) return;
+    ctx.save();
+    ctx.translate(sx,sy);
+    ctx.fillStyle = "rgba(0,0,0,.12)";
+    ctx.beginPath(); ctx.ellipse(0, 13, 25, 6, 0, 0, Math.PI*2); ctx.fill();
+    const caps = [[-12,0,10,"#e87761"],[4,-4,12,"#f2935c"],[17,4,8,"#df6b64"]];
+    for(const [mx,my,r,c] of caps){
+      ctx.fillStyle = "#fff0ca";
+      ctx.fillRect(mx-3,my+4,6,12);
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(mx,my+4,r,Math.PI,0);
+      ctx.lineTo(mx+r,my+7);
+      ctx.lineTo(mx-r,my+7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#7d4738";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = "#fff7d6";
+      ctx.fillRect(mx-3,my+2,3,2);
+    }
+    ctx.restore();
+  }
+
+  function drawBarrelStack(x,y){
+    const sx=screenX(x), sy=screenY(y);
+    if(sx < -50 || sx > game.w+50 || sy < -50 || sy > game.h+50) return;
+    ctx.save();
+    ctx.translate(sx,sy);
+    const barrels = [[-14,5],[12,5],[0,-12]];
+    ctx.fillStyle = "rgba(0,0,0,.15)";
+    ctx.beginPath(); ctx.ellipse(0, 22, 34, 8, 0, 0, Math.PI*2); ctx.fill();
+    for(const [bx,by] of barrels){
+      ctx.fillStyle = "#a86733";
+      ctx.fillRect(bx-10,by-9,20,22);
+      ctx.fillStyle = "#d49a55";
+      ctx.fillRect(bx-8,by-7,16,18);
+      ctx.strokeStyle = "#5a371e";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx-10,by-9,20,22);
+      ctx.fillStyle = "#6b4123";
+      ctx.fillRect(bx-11,by-3,22,3);
+      ctx.fillRect(bx-11,by+7,22,3);
+    }
+    ctx.restore();
+  }
+
   function drawPath(x,y,w,h){
     ctx.save();
     ctx.translate(screenX(x), screenY(y));
-    ctx.fillStyle="#d9b875";
+    ctx.fillStyle="rgba(67,43,22,.13)";
     ctx.fillRect(0,0,w,h);
+    ctx.fillStyle="#d9b875";
+    ctx.fillRect(3,3,Math.max(0,w-6),Math.max(0,h-6));
+    ctx.fillStyle="rgba(255,241,185,.42)";
+    ctx.fillRect(7,7,Math.max(0,w-14),3);
+    ctx.fillStyle="rgba(112,75,37,.22)";
+    ctx.fillRect(6,Math.max(0,h-10),Math.max(0,w-12),4);
     ctx.fillStyle="#cba765";
     for(let yy=0; yy<h; yy+=32){
       for(let xx=0; xx<w; xx+=38){
@@ -3993,23 +4105,29 @@ function drawCave(){
     ctx.save();
     ctx.translate(sx,sy);
     ctx.fillStyle="rgba(0,0,0,.18)";
-    ctx.fillRect(-18,26,36,9);
+    ctx.beginPath();
+    ctx.ellipse(0,30,23,7,0,0,Math.PI*2);
+    ctx.fill();
     ctx.fillStyle="#805229";
     ctx.fillRect(-6,3,12,31);
     ctx.strokeStyle="#4b2c14";
     ctx.lineWidth=2;
     ctx.strokeRect(-6,3,12,31);
     ctx.fillStyle="#3d9b42";
-    ctx.fillRect(-25,-20,50,28);
-    ctx.fillRect(-19,-36,38,28);
-    ctx.fillRect(-12,-51,24,25);
+    ctx.beginPath(); ctx.ellipse(0,-12,30,22,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-9,-30,22,18,-.2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10,-32,21,18,.2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0,-47,17,15,0,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle="#2b6d30";
     ctx.lineWidth=2;
-    ctx.strokeRect(-25,-20,50,28);
-    ctx.strokeRect(-19,-36,38,28);
-    ctx.strokeRect(-12,-51,24,25);
+    ctx.beginPath(); ctx.ellipse(0,-12,30,22,0,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(-9,-30,22,18,-.2,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(10,-32,21,18,.2,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0,-47,17,15,0,0,Math.PI*2); ctx.stroke();
     ctx.fillStyle="#63c15e";
-    ctx.fillRect(-17,-29,12,5);
+    ctx.beginPath(); ctx.ellipse(-12,-31,9,4,-.35,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="rgba(255,255,210,.36)";
+    ctx.beginPath(); ctx.ellipse(-8,-46,5,3,-.3,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
 
